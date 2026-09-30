@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "60-in-60",
+    "slug": "60-in-60",
+    "icon": "./assets/icon.png",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "sixtyin60",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.sixtyin60.game"
+    },
+    "android": {
+      "package": "com.sixtyin60.game",
+      "adaptiveIcon": { "foregroundImage": "./assets/icon.png", "backgroundColor": "#173C37" },
+      "edgeToEdgeEnabled": true
+    },
+    "web": { "bundler": "metro", "output": "single", "name": "60-in-60", "favicon": "./assets/favicon.png" },
+    "plugins": ["expo-font"],
+    "splash": { "backgroundColor": "#F7F6F0", "resizeMode": "contain" }
+  }
+}
