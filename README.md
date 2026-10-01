@@ -62,11 +62,22 @@ The project is linked to [@nutmagpie/60-in-60 on Expo](https://expo.dev/accounts
 From a machine with an Expo account and the appropriate build access:
 
 ```sh
-npx eas-cli build --platform all --profile preview
+npx eas-cli build --platform android --profile preview
+npx eas-cli build --platform ios --profile preview
 npx eas-cli build --platform all --profile production
 ```
 
-Choose your own unique bundle identifiers before a store release. Production iOS builds require Apple signing; Android store submission requires a Play Console app and signing configuration. Expo account authentication and Android signing setup are complete. The initial Android build upload was blocked by the cloud network policy; the required domain additions are saved in the environment draft. A native binary, physical-device testing, and store submission have not yet been completed.
+The Android preview build [f705e099-4dc7-4827-ba48-c3e6df8b2fa7](https://expo.dev/accounts/nutmagpie/projects/60-in-60/builds/f705e099-4dc7-4827-ba48-c3e6df8b2fa7) finished successfully. [Download its standalone APK](https://expo.dev/artifacts/eas/ws3ST-6Bxh7JUAWG4c0WBw3EiJqKYnuPpgBJKO52Y-I.apk). This app runs without a MacBook, Expo Go, or a development server.
+
+The cloud environment could not download the finished APK: Expo's artifact endpoint returned HTTP 403, including through the official EAS download command. APK integrity/signature checks and physical-device installation have therefore not been verified here. Source tests and native bundle exports passed; Expo reports the native build as finished with no error.
+
+The iOS preview profile produces a simulator build. Production iOS builds require Apple signing; Android store submission requires a Play Console app and signing configuration. Choose your own unique bundle identifiers before a store release. Store submission has not been completed.
+
+### Install on Android
+
+1. Open the APK download link on your Android phone and download the file.
+2. Open the downloaded APK. If Android prompts, allow **Install unknown apps** / **Allow from this source** for the browser or file manager, then tap **Install**.
+3. Open **60-in-60** and create or choose a player profile. Gameplay works offline; profiles and progress stay on that device.
 
 ## Source map
 
