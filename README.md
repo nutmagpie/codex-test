@@ -57,6 +57,8 @@ EXPO_OFFLINE=1 npm run build -- --max-workers 2
 
 `app.json` includes app identity, portrait orientation, tablet support, native icons, and a URL scheme. `eas.json` includes an Android APK / iOS simulator preview profile and a production profile.
 
+The project is linked to [@nutmagpie/60-in-60 on Expo](https://expo.dev/accounts/nutmagpie/projects/60-in-60). Android signing credentials are configured remotely in Expo. EAS source uploads require access to `storage.googleapis.com`; account/build operations use `api.expo.dev`, and installation links use `expo.dev`.
+
 From a machine with an Expo account and the appropriate build access:
 
 ```sh
@@ -64,7 +66,7 @@ npx eas-cli build --platform all --profile preview
 npx eas-cli build --platform all --profile production
 ```
 
-Choose your own unique bundle identifiers before a store release. Production iOS builds require Apple signing; Android store submission requires a Play Console app and signing configuration. EAS login, native binaries, physical-device testing, and store submission have not been performed in this cloud setup.
+Choose your own unique bundle identifiers before a store release. Production iOS builds require Apple signing; Android store submission requires a Play Console app and signing configuration. Expo account authentication and Android signing setup are complete. The initial Android build upload was blocked by the cloud network policy; the required domain additions are saved in the environment draft. A native binary, physical-device testing, and store submission have not yet been completed.
 
 ## Source map
 

@@ -13,11 +13,30 @@
     },
     "android": {
       "package": "com.sixtyin60.game",
-      "adaptiveIcon": { "foregroundImage": "./assets/icon.png", "backgroundColor": "#173C37" },
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#173C37"
+      },
       "edgeToEdgeEnabled": true
     },
-    "web": { "bundler": "metro", "output": "single", "name": "60-in-60", "favicon": "./assets/favicon.png" },
-    "plugins": ["expo-font"],
-    "splash": { "backgroundColor": "#F7F6F0", "resizeMode": "contain" }
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "name": "60-in-60",
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-font"
+    ],
+    "splash": {
+      "backgroundColor": "#F7F6F0",
+      "resizeMode": "contain"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "cad3f089-d76f-4fa5-9ed2-c5ba804f1e5b"
+      }
+    },
+    "owner": "nutmagpie"
   }
 }
