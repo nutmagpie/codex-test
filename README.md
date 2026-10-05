@@ -69,7 +69,9 @@ npx eas-cli build --platform ios --profile preview
 npx eas-cli build --platform all --profile production
 ```
 
-The initial Android preview build (version 1.0.0), [f705e099-4dc7-4827-ba48-c3e6df8b2fa7](https://expo.dev/accounts/nutmagpie/projects/60-in-60/builds/f705e099-4dc7-4827-ba48-c3e6df8b2fa7), finished successfully. [Download its standalone APK](https://expo.dev/artifacts/eas/ws3ST-6Bxh7JUAWG4c0WBw3EiJqKYnuPpgBJKO52Y-I.apk). This app runs without a MacBook, Expo Go, or a development server.
+The version 1.0.1 timing update (Android build 2) is submitted to Expo as [build 48b4c0e6-5224-4831-85a8-3c61e21c262f](https://expo.dev/accounts/nutmagpie/projects/60-in-60/builds/48b4c0e6-5224-4831-85a8-3c61e21c262f). It removes the correct-answer transition delay in Speed and Mastery. The build is waiting for an Expo worker; once it finishes, download its APK from that build record to update the existing app.
+
+The initial Android preview build (version 1.0.0), [f705e099-4dc7-4827-ba48-c3e6df8b2fa7](https://expo.dev/accounts/nutmagpie/projects/60-in-60/builds/f705e099-4dc7-4827-ba48-c3e6df8b2fa7), finished successfully. [Download its standalone APK](https://expo.dev/artifacts/eas/ws3ST-6Bxh7JUAWG4c0WBw3EiJqKYnuPpgBJKO52Y-I.apk). This older APK retains the original transition timing. The standalone app runs without a MacBook, Expo Go, or a development server.
 
 The cloud environment could not download the finished APK: Expo's artifact endpoint returned HTTP 403, including through the official EAS download command. APK integrity/signature checks and physical-device installation have therefore not been verified here. Source tests and native bundle exports passed; Expo reports the native build as finished with no error.
 
