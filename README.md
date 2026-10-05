@@ -18,6 +18,8 @@ Each session has three hearts. A wrong answer costs one heart; the third miss en
 
 Answers submit automatically when the expected number of digits has been entered. Backspace can correct an incomplete answer. Single-digit answers submit immediately. Web players can also use the number keys and Backspace. No Enter button is needed.
 
+In Speed and Mastery, correct answers advance to the next card immediately, with no input lock or forced transition delay. A brief success message stays below the new card for 450 ms without interrupting typing. Incorrect answers show a correction for 350 ms before advancing; the clock keeps running. Learn retains a 100 ms success pause and a 1.25-second correction pause.
+
 Addition and multiplication use operands in the selected range. Subtraction keeps both operands in range and produces nonnegative answers (including zero). Division draws its divisor and quotient from the range and builds an exact dividend, so there are no fractions. Shuffled fact banks cover all facts before repeating, avoid adjacent duplicate questions, and balance mixed operations.
 
 ## Family profiles
@@ -50,7 +52,7 @@ EXPO_OFFLINE=1 npm run build -- --max-workers 2
 ```
 
 - Unit tests exercise all arithmetic worlds/ranges, shuffling, digit counts, timing boundaries, the third-miss limit, 58-of-60 mastery, independent player progress, persistence validation, and bounded history.
-- Playwright tests exercise the real UI at 390×844: keypad/backspace, heart limits, replay, a full mastery run, deadlines, and family profiles across reloads. The suite starts Metro if necessary. It uses `/usr/bin/chromium` in this cloud machine; set `CHROMIUM_PATH` to another installed binary when needed.
+- Playwright tests exercise the real UI at 390×844: keypad/backspace, heart limits, replay, a full mastery run, deadlines, and family profiles across reloads. Frozen-clock checks verify immediate timed transitions, preservation of partially entered answers, feedback timer replacement, and Learn pacing. The suite starts Metro if necessary. It uses `/usr/bin/chromium` in this cloud machine; set `CHROMIUM_PATH` to another installed binary when needed.
 - `build` exports web JavaScript and iOS/Android Hermes bundles into ignored `dist/`. **Bundle export is not a signed native binary build or device test.**
 
 ## Native distribution
@@ -67,7 +69,7 @@ npx eas-cli build --platform ios --profile preview
 npx eas-cli build --platform all --profile production
 ```
 
-The Android preview build [f705e099-4dc7-4827-ba48-c3e6df8b2fa7](https://expo.dev/accounts/nutmagpie/projects/60-in-60/builds/f705e099-4dc7-4827-ba48-c3e6df8b2fa7) finished successfully. [Download its standalone APK](https://expo.dev/artifacts/eas/ws3ST-6Bxh7JUAWG4c0WBw3EiJqKYnuPpgBJKO52Y-I.apk). This app runs without a MacBook, Expo Go, or a development server.
+The initial Android preview build (version 1.0.0), [f705e099-4dc7-4827-ba48-c3e6df8b2fa7](https://expo.dev/accounts/nutmagpie/projects/60-in-60/builds/f705e099-4dc7-4827-ba48-c3e6df8b2fa7), finished successfully. [Download its standalone APK](https://expo.dev/artifacts/eas/ws3ST-6Bxh7JUAWG4c0WBw3EiJqKYnuPpgBJKO52Y-I.apk). This app runs without a MacBook, Expo Go, or a development server.
 
 The cloud environment could not download the finished APK: Expo's artifact endpoint returned HTTP 403, including through the official EAS download command. APK integrity/signature checks and physical-device installation have therefore not been verified here. Source tests and native bundle exports passed; Expo reports the native build as finished with no error.
 
@@ -76,7 +78,7 @@ The iOS preview profile produces a simulator build. Production iOS builds requir
 ### Install on Android
 
 1. Open the APK download link on your Android phone and download the file.
-2. Open the downloaded APK. If Android prompts, allow **Install unknown apps** / **Allow from this source** for the browser or file manager, then tap **Install**.
+2. Open the downloaded APK. If Android prompts, allow **Install unknown apps** / **Allow from this source** for the browser or file manager, then tap **Install** (or **Update** if already installed). Install updates over the existing app to keep its player profiles and progress.
 3. Open **60-in-60** and create or choose a player profile. Gameplay works offline; profiles and progress stay on that device.
 
 ## Source map

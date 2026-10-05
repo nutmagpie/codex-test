@@ -1,6 +1,6 @@
 {
   "name": "60-in-60",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "main": "index.ts",
   "scripts": {

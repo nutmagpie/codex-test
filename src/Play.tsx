@@ -22,7 +22,9 @@ export function GameScreen({ level, mode, playerName, haptics, onFinish, onQuit 
   const world = WORLDS.find(w => w.id === level.worldId)!;
   const seconds = MODES[mode].seconds;
   const remaining = seconds === null ? null : Math.max(0, seconds - session.elapsedMs / 1000);
-  const visibleQuestion = feedback?.question || session.questions[Math.min(session.index, session.questions.length - 1)];
+  // Timed successes are a message only; the next card is ready immediately.
+  const heldFeedback = feedback && (mode === 'learn' || !feedback.correct) ? feedback : null;
+  const visibleQuestion = heldFeedback?.question || session.questions[Math.min(session.index, session.questions.length - 1)];
 
   useEffect(() => {
     if (ready) return;
@@ -62,13 +64,22 @@ export function GameScreen({ level, mode, playerName, haptics, onFinish, onQuit 
     if (value.length < expectedDigits(q)) return;
     busy.current = true;
     const next = submitAnswer(current, Number(value));
+    if (timeout.current) { clearTimeout(timeout.current); timeout.current = null; }
     sessionRef.current = next;
     setSession(next);
     setFeedback(next.lastAnswer);
     if (haptics && Platform.OS !== 'web') Haptics.notificationAsync(next.lastAnswer?.correct ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Warning).catch(() => {});
+    if (next.status !== 'playing') return;
+    const holdCard = mode === 'learn' || !next.lastAnswer?.correct;
+    if (!holdCard) {
+      inputRef.current = ''; setInput(''); busy.current = false;
+    }
+    const feedbackMs = holdCard ? next.lastAnswer?.correct ? 100 : mode === 'learn' ? 1250 : 350 : 450;
     timeout.current = setTimeout(() => {
-      busy.current = false; inputRef.current = ''; setInput(''); setFeedback(null);
-    }, next.lastAnswer?.correct ? 100 : mode === 'learn' ? 1250 : 350);
+      // A success message must never erase digits entered on the next card.
+      if (holdCard) { inputRef.current = ''; setInput(''); busy.current = false; }
+      setFeedback(null); timeout.current = null;
+    }, feedbackMs);
   }, [ready, quit, haptics, mode]);
   const erase = useCallback(() => {
     if (busy.current || !ready || quit) return;
@@ -92,11 +103,11 @@ export function GameScreen({ level, mode, playerName, haptics, onFinish, onQuit 
       {!ready ? <View style={s.countdown}><Label>FIND YOUR RHYTHM</Label><T weight="display" style={{ fontSize: 106, lineHeight: 120 }}>{countdown}</T><T style={{ fontSize: 17 }}>Take a breath. You've got this.</T><T style={{ color: C.muted, fontSize: 13 }}>{MODES[mode].cards} cards · {seconds} seconds · 3 hearts</T></View> : <>
         <View style={s.gameStatus}><View style={{ gap: 6 }}><Label>YOUR HEARTS</Label><View style={{ flexDirection: 'row', gap: 6 }} testID="hearts">{[0, 1, 2].map(i => <Heart key={i} size={24} fill={i < session.hearts ? C.coral : 'transparent'} color={i < session.hearts ? C.coral : '#D9DFD5'} strokeWidth={1.5} />)}</View></View><View style={{ alignItems: 'flex-end', gap: 4 }}><Label>{seconds ? 'SECONDS LEFT' : 'TAKE YOUR TIME'}</Label><View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}><Clock3 size={16} color={remaining !== null && remaining < 10 ? C.coral : C.green} /><T weight="display" testID="timer" style={{ fontSize: 27, color: remaining !== null && remaining < 10 ? C.coral : C.ink }}>{remaining === null ? '∞' : Math.ceil(remaining).toString().padStart(2, '0')}</T></View></View></View>
         <View style={{ gap: 8 }}><View style={s.sectionLine}><T style={{ fontSize: 11, color: C.muted }}>One card at a time.</T><T weight="bold" style={{ fontSize: 11 }} testID="card-count">{session.answered} / {MODES[mode].cards}</T></View><View style={s.track}><View style={[s.trackFill, { width: `${session.answered / MODES[mode].cards * 100}%` }]} /></View></View>
-        <View style={[s.flashCard, feedback && { borderColor: feedback.correct ? C.green : C.coral, backgroundColor: feedback.correct ? '#F0F7E9' : '#FFF2ED' }]}>
-          <View style={s.sectionLine}><Label>CARD {String(Math.min(session.answered + (feedback ? 0 : 1), MODES[mode].cards)).padStart(2, '0')}</Label><Sparkles size={15} color={C.green} /></View>
+        <View style={[s.flashCard, heldFeedback && { borderColor: heldFeedback.correct ? C.green : C.coral, backgroundColor: heldFeedback.correct ? '#F0F7E9' : '#FFF2ED' }]}>
+          <View style={s.sectionLine}><Label>CARD {String(Math.min(session.answered + (heldFeedback ? 0 : 1), MODES[mode].cards)).padStart(2, '0')}</Label><Sparkles size={15} color={C.green} /></View>
           <View accessibilityLabel={`${visibleQuestion.left} ${visibleQuestion.symbol} ${visibleQuestion.right}`} testID="question" style={s.equation}><T weight="display" style={s.operand}>{visibleQuestion.left}</T><T weight="display" style={[s.operand, { color: C.coral }]}>{visibleQuestion.symbol}</T><T weight="display" style={s.operand}>{visibleQuestion.right}</T></View>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 }}><T style={{ fontSize: 24, color: C.muted, marginRight: 7 }}>=</T>{Array.from({ length: expectedDigits(visibleQuestion) }, (_, i) => <View key={i} style={[s.answerSlot, input[i] !== undefined && { borderColor: C.ink, backgroundColor: C.mint }]}><T weight="display" testID={`answer-digit-${i}`} style={{ fontSize: 30 }}>{input[i] ?? ''}</T>{input[i] === undefined && <View style={{ width: 10, height: 2, backgroundColor: '#C4CEC0', position: 'absolute', bottom: 19 }} />}</View>)}</View>
-          <View style={{ height: 24, justifyContent: 'center', marginTop: 8 }}>{feedback ? <T weight="bold" style={{ textAlign: 'center', fontSize: 12, color: feedback.correct ? C.green : '#AD5139' }}>{feedback.correct ? 'Nice one. Keep your flow.' : `${feedback.question.left} ${feedback.question.symbol} ${feedback.question.right} = ${feedback.question.answer}. You've got the next one.`}</T> : <T style={{ color: C.muted, fontSize: 10, textAlign: 'center' }}>{expectedDigits(visibleQuestion)} {expectedDigits(visibleQuestion) === 1 ? 'digit' : 'digits'} · answer submits automatically</T>}</View>
+          <View style={{ height: 24, justifyContent: 'center', marginTop: 8 }}>{feedback ? <T testID="answer-feedback" weight="bold" style={{ textAlign: 'center', fontSize: 12, color: feedback.correct ? C.green : '#AD5139' }}>{feedback.correct ? 'Nice one. Keep your flow.' : `${feedback.question.left} ${feedback.question.symbol} ${feedback.question.right} = ${feedback.question.answer}. You've got the next one.`}</T> : <T style={{ color: C.muted, fontSize: 10, textAlign: 'center' }}>{expectedDigits(visibleQuestion)} {expectedDigits(visibleQuestion) === 1 ? 'digit' : 'digits'} · answer submits automatically</T>}</View>
         </View>
         <View style={s.numberPad}>{[['1', '2', '3'], ['4', '5', '6'], ['7', '8', '9'], ['', '0', 'delete']].map((row, i) => <View key={i} style={{ flexDirection: 'row', gap: 12 }}>{row.map(key => key === '' ? <View key="empty" style={[s.key, { backgroundColor: 'transparent', borderWidth: 0, justifyContent: 'center' }]}><T style={{ color: C.muted, fontSize: 8, letterSpacing: 1, textAlign: 'center', lineHeight: 15 }}>JUST TAP.{"\n"}NO ENTER.</T></View> : <Pressable key={key} testID={`key-${key}`} accessibilityRole="button" accessibilityLabel={key === 'delete' ? 'Delete last digit' : key} onPress={() => key === 'delete' ? erase() : pressDigit(key)} style={({ pressed }) => [s.key, key === 'delete' && { backgroundColor: C.pale }, { opacity: pressed ? .6 : 1, transform: [{ scale: pressed ? .96 : 1 }] }]}>{key === 'delete' ? <Delete size={25} color={C.ink} /> : <T weight="display" style={{ fontSize: 29 }}>{key}</T>}</Pressable>)}</View>)}</View>
         <T style={{ fontSize: 10, color: C.muted, textAlign: 'center', marginTop: 2 }}>{mode === 'learn' ? 'No rush. You’re building something good.' : 'Breathe. Focus. One little win at a time.'}</T>

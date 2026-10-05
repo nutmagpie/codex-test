@@ -54,6 +54,39 @@ async function enterAnswer(page: Page, index: number, total: number, incorrect =
   }
 }
 
+async function enterDigits(page: Page, value: string) {
+  for (const digit of value) await page.getByTestId(`key-${digit}`).click();
+}
+
+async function startFrozenTimedRun(page: Page, mode: 'speed' | 'mastery') {
+  await page.clock.install();
+  await selectMode(page, 'addition', 12, mode);
+  for (let step = 0; step < 3; step++) await page.clock.runFor(800);
+  await expect(page.getByTestId('question')).toBeVisible();
+  // Once the countdown has rendered, stop all browser timers. Correct answers
+  // must remain playable without running even one delayed callback.
+  await page.clock.pauseAt(new Date(await page.evaluate(() => Date.now() + 1_000)));
+}
+
+async function answerWithoutAdvancingTime(page: Page, index: number, total: number) {
+  const question = await readQuestion(page);
+  const now = await page.evaluate(() => Date.now());
+  await enterDigits(page, String(question.answer));
+  await expect(page.getByTestId('card-count')).toHaveText(`${index + 1} / ${total}`);
+  await expect(page.getByTestId('question')).not.toHaveAttribute('aria-label', question.label);
+  await expect(page.getByTestId('answer-digit-0')).toHaveText('');
+  expect(await page.evaluate(() => Date.now())).toBe(now);
+}
+
+async function findTwoDigitQuestion(page: Page, index: number, total: number) {
+  for (let attempt = 0; attempt < 15; attempt++) {
+    const question = await readQuestion(page);
+    if (String(question.answer).length === 2) return { question, index };
+    await answerWithoutAdvancingTime(page, index++, total);
+  }
+  throw new Error('The reproducible addition deck did not present a two-digit answer');
+}
+
 async function completeLearn(page: Page) {
   await expect(page.getByTestId('card-count')).toHaveText('0 / 20');
   for (let index = 0; index < 20; index++) await enterAnswer(page, index, 20);
@@ -141,6 +174,96 @@ test('a real 60-card run with two misses passes and keeps mastery after reload',
   await page.getByTestId('nav-progress').click();
   await expect(page.getByText('Mastery · Completed', { exact: true })).toBeVisible();
   await expect(page.getByText('58/60', { exact: true })).toBeVisible();
+});
+
+for (const mode of ['speed', 'mastery'] as const) {
+  test(`${mode} correct answers advance immediately and feedback preserves the next answer`, async ({ page }) => {
+    const total = mode === 'speed' ? 30 : 60;
+    await startFrozenTimedRun(page, mode);
+    await answerWithoutAdvancingTime(page, 0, total);
+    const { question, index } = await findTwoDigitQuestion(page, 1, total);
+    const [first, second] = String(question.answer);
+
+    await expect(page.getByText('Nice one. Keep your flow.', { exact: true })).toBeVisible();
+    await page.getByTestId(`key-${first}`).click();
+    await expect(page.getByTestId('answer-digit-0')).toHaveText(first);
+    await expect(page.getByTestId('answer-digit-1')).toHaveText('');
+    await expect(page.getByTestId('card-count')).toHaveText(`${index} / ${total}`);
+
+    await page.clock.runFor(450);
+    await expect(page.getByText('Nice one. Keep your flow.', { exact: true })).toHaveCount(0);
+    await expect(page.getByTestId('question')).toHaveAttribute('aria-label', question.label);
+    await expect(page.getByTestId('answer-digit-0')).toHaveText(first);
+    await page.getByTestId('key-delete').click();
+    await expect(page.getByTestId('answer-digit-0')).toHaveText('');
+    await enterDigits(page, first + second);
+    await expect(page.getByTestId('card-count')).toHaveText(`${index + 1} / ${total}`);
+    await expect(page.getByTestId('question')).not.toHaveAttribute('aria-label', question.label);
+    await expect(page.getByTestId('answer-digit-0')).toHaveText('');
+  });
+}
+
+test('a timed mistake supersedes success feedback and keeps its full correction pause', async ({ page }) => {
+  await startFrozenTimedRun(page, 'mastery');
+  await answerWithoutAdvancingTime(page, 0, 60);
+  await page.clock.runFor(250);
+  const wrongQuestion = await readQuestion(page);
+  await enterDigits(page, '0'.repeat(String(wrongQuestion.answer).length));
+  await expect(page.getByTestId('card-count')).toHaveText('2 / 60');
+  await expect(page.getByTestId('hearts').locator('svg[fill="#F37858"]')).toHaveCount(2);
+  await expect(page.getByTestId('question')).toHaveAttribute('aria-label', wrongQuestion.label);
+  await expect(page.getByText(`${wrongQuestion.label} = ${wrongQuestion.answer}. You've got the next one.`, { exact: true })).toBeVisible();
+
+  // The old success callback would fire here, 450 ms after the first answer
+  // but only 200 ms into the newer 350 ms correction. It must be cancelled.
+  await page.clock.runFor(200);
+  await page.getByTestId('key-9').click();
+  await page.getByTestId('key-delete').click();
+  await expect(page.getByText(`${wrongQuestion.label} = ${wrongQuestion.answer}. You've got the next one.`, { exact: true })).toBeVisible();
+  await expect(page.getByTestId('question')).toHaveAttribute('aria-label', wrongQuestion.label);
+  await expect(page.getByTestId('card-count')).toHaveText('2 / 60');
+  await expect(page.getByTestId('answer-digit-0')).toHaveText('0');
+  await page.clock.runFor(149);
+  await expect(page.getByTestId('question')).toHaveAttribute('aria-label', wrongQuestion.label);
+  await page.clock.runFor(1);
+  await expect(page.getByTestId('question')).not.toHaveAttribute('aria-label', wrongQuestion.label);
+  await expect(page.getByTestId('answer-digit-0')).toHaveText('');
+
+  const { question, index } = await findTwoDigitQuestion(page, 2, 60);
+  const [first, second] = String(question.answer);
+  await page.getByTestId(`key-${first}`).click();
+  await expect(page.getByTestId('answer-digit-0')).toHaveText(first);
+  // After correction, typing the next answer remains safe while any subsequent
+  // success feedback from finding a two-digit card is still visible.
+  await page.clock.runFor(100);
+  await expect(page.getByTestId('question')).toHaveAttribute('aria-label', question.label);
+  await expect(page.getByTestId('answer-digit-0')).toHaveText(first);
+  await page.getByTestId(`key-${second}`).click();
+  await expect(page.getByTestId('card-count')).toHaveText(`${index + 1} / 60`);
+});
+
+test('Learn keeps its paced correct-answer and correction pauses', async ({ page }) => {
+  await page.clock.install();
+  await selectMode(page, 'addition', 12, 'learn');
+  await page.clock.pauseAt(new Date(await page.evaluate(() => Date.now() + 1_000)));
+  const correctQuestion = await readQuestion(page);
+  await enterDigits(page, String(correctQuestion.answer));
+  await expect(page.getByTestId('question')).toHaveAttribute('aria-label', correctQuestion.label);
+  await page.clock.runFor(99);
+  await expect(page.getByTestId('question')).toHaveAttribute('aria-label', correctQuestion.label);
+  await page.clock.runFor(1);
+  await expect(page.getByTestId('question')).not.toHaveAttribute('aria-label', correctQuestion.label);
+
+  const wrongQuestion = await readQuestion(page);
+  await enterDigits(page, '0'.repeat(String(wrongQuestion.answer).length));
+  await page.clock.runFor(1_249);
+  await page.getByTestId('key-9').click();
+  await expect(page.getByTestId('question')).toHaveAttribute('aria-label', wrongQuestion.label);
+  await expect(page.getByTestId('card-count')).toHaveText('2 / 20');
+  await page.clock.runFor(1);
+  await expect(page.getByTestId('question')).not.toHaveAttribute('aria-label', wrongQuestion.label);
+  await expect(page.getByTestId('answer-digit-0')).toHaveText('');
+  await expect(page.getByTestId('timer')).toHaveText('∞');
 });
 
 test('timed modes expire at their deadline while Learn stays untimed', async ({ page }) => {
