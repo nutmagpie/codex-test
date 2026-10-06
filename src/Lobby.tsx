@@ -52,12 +52,18 @@ export function Home({ profile, wide, onWorld, onLevel }: { profile: Profile; wi
       <View style={s.sectionHeading}><View style={{ gap: 5 }}><T weight="display" style={{ fontSize: 25 }}>A world of progress.</T><T style={s.sub}>Seven worlds. Your pace. Endless possibilities.</T></View><Pill color={C.paper}>7 WORLDS</Pill></View>
       <View style={[s.worldGrid, !wide && { gap: 12 }]}>
         {WORLDS.map((world, i) => {
-          const completed = getLevels(world.id).filter(l => profile.progress[l.id]?.mastery).length;
+          const mastered = getLevels(world.id).filter(l => profile.progress[l.id]?.mastery);
+          const completed = mastered.length;
           const final = i === 6;
-          return <Pressable key={world.id} testID={`world-${world.id}`} accessibilityRole="button" accessibilityLabel={`Explore ${world.name}`} onPress={() => onWorld(world.id)} style={({ pressed }) => [s.worldCard, { width: wide ? (final ? '100%' : '31.8%') : '100%', backgroundColor: final ? C.ink : C.paper, opacity: pressed ? .8 : 1 }, final && s.finalWorld]}>
+          return <Pressable key={world.id} testID={`world-${world.id}`} accessibilityRole="button" accessibilityLabel={`Explore ${world.name}`} onPress={() => onWorld(world.id)} style={({ pressed }) => [s.worldCard, { width: wide ? (final ? '100%' : '31.8%') : '100%', backgroundColor: final ? C.ink : C.paper, opacity: pressed ? .8 : 1 }, final && s.finalWorld, final && !wide && { flexDirection: 'column', alignItems: 'stretch' }]}>
             <View style={[s.worldTop, final && { marginBottom: 0 }]}><WorldArt symbol={world.symbol} color={final ? C.mint : worldColors[i]} size={final ? 74 : 67} /><Pill color={final ? '#31514A' : C.bg} ink={final ? C.mint : C.muted}>WORLD {String(i + 1).padStart(2, '0')}</Pill></View>
-            <View style={{ flex: final ? 1 : undefined, gap: 7 }}><T weight="display" style={{ fontSize: 20, color: final ? C.paper : C.ink }}>{world.name}</T><T style={{ color: final ? '#B8C9BE' : C.muted, fontSize: 12, lineHeight: 19 }}>{worldCopy[i]}</T>{!final && <View style={s.cardFooter}><T style={{ fontSize: 11, color: C.muted }}>3 levels · {completed}/3 mastered</T><ArrowUpRight size={17} color={C.ink} /></View>}</View>
-            {final && <View style={{ backgroundColor: C.mint, padding: 11, borderRadius: 30 }}><ArrowUpRight size={21} color={C.ink} /></View>}
+            <View style={{ flex: final && wide ? 1 : undefined, minWidth: 0, gap: 7 }}>
+              <T weight="display" style={{ fontSize: 20, color: final ? C.paper : C.ink }}>{world.name}</T>
+              {mastered.length > 0 && <View testID={`world-mastery-badges-${world.id}`} style={s.masteryBadges}>{mastered.map(level => <View key={level.id} testID={`world-mastery-${level.id}`} accessible accessibilityLabel={`${world.name} 1 to ${level.range} mastered`} style={[s.progressBadge, s.masteredBadge]}><Trophy size={12} color={C.green} /><T weight="bold" style={{ fontSize: 11, color: C.ink }}>1–{level.range}</T></View>)}</View>}
+              <T style={{ color: final ? '#B8C9BE' : C.muted, fontSize: 12, lineHeight: 19 }}>{worldCopy[i]}</T>
+              {!final && <View style={s.cardFooter}><T style={{ fontSize: 11, color: C.muted }}>3 levels · {completed}/3 mastered</T><ArrowUpRight size={17} color={C.ink} /></View>}
+            </View>
+            {final && <View style={{ backgroundColor: C.mint, padding: 11, borderRadius: 30, alignSelf: wide ? 'center' : 'flex-end' }}><ArrowUpRight size={21} color={C.ink} /></View>}
           </Pressable>;
         })}
       </View>
@@ -124,7 +130,8 @@ export function ProgressScreen({ profile, wide, onLevel }: { profile: Profile; w
     <T weight="display" style={{ fontSize: 24 }}>Your latest little wins.</T>
     {!profile.history.length ? <Empty title="Your story starts with one card." subtitle="Play a session to see your accuracy, pace, and progress here." icon={Leaf} /> : <View style={{ gap: 10 }}>{profile.history.slice(0, 8).map(run => {
       const l = getLevel(run.levelId); const w = WORLDS.find(w => w.id === l.worldId)!;
-      return <View key={run.id} style={s.history}><View style={[s.historyIcon, { backgroundColor: run.passed ? C.mint : '#F8E9B5' }]}>{run.passed ? <Check size={19} color={C.green} /> : <Leaf size={19} color={C.green} />}</View><View style={{ flex: 1, gap: 4 }}><T weight="bold" style={{ fontSize: 12 }}>{w.name} · 1–{l.range}</T><T style={{ color: C.muted, fontSize: 11 }}>{MODES[run.mode].name} · {run.passed ? 'Completed' : 'Building confidence'}</T></View><View style={{ alignItems: 'flex-end', gap: 4 }}><T weight="display" style={{ fontSize: 18 }}>{run.correct}/{MODES[run.mode].cards}</T><T style={{ fontSize: 10, color: C.muted }}>{Math.ceil(run.elapsedMs / 1000)}s · {new Date(run.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</T></View></View>;
+      const mastered = run.passed && run.mode === 'mastery';
+      return <View key={run.id} testID={`history-run-${run.id}`} style={s.history}><View testID={`history-${mastered ? 'trophy' : run.passed ? 'check' : 'practice'}-${run.id}`} accessible accessibilityLabel={mastered ? 'Mastery completed' : run.passed ? 'Practice completed' : 'Building confidence'} style={[s.historyIcon, { backgroundColor: run.passed ? C.mint : '#F8E9B5' }]}>{mastered ? <Trophy size={19} color={C.green} /> : run.passed ? <Check size={19} color={C.green} /> : <Leaf size={19} color={C.green} />}</View><View style={{ flex: 1, gap: 4 }}><T weight="bold" style={{ fontSize: 12 }}>{w.name} · 1–{l.range}</T><T style={{ color: C.muted, fontSize: 11 }}>{MODES[run.mode].name} · {run.passed ? 'Completed' : 'Building confidence'}</T></View><View style={{ alignItems: 'flex-end', gap: 4 }}><T weight="display" style={{ fontSize: 18 }}>{run.correct}/{MODES[run.mode].cards}</T><T style={{ fontSize: 10, color: C.muted }}>{Math.ceil(run.elapsedMs / 1000)}s · {new Date(run.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</T></View></View>;
     })}</View>}
     <T style={{ fontSize: 10, color: C.muted }}>* Answer and session totals reflect your most recent 100 sessions. Mastery stays saved.</T>
   </View>;
@@ -157,6 +164,7 @@ const s = StyleSheet.create({
   worldHero: { borderRadius: 24, padding: 29, flexDirection: 'row', alignItems: 'center', gap: 14 }, levelRow: { padding: 22, backgroundColor: C.paper, borderWidth: 1, borderColor: C.line, borderRadius: 20, flexDirection: 'row', alignItems: 'center', gap: 20 }, levelNumber: { width: 57, height: 65, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   modeCard: { backgroundColor: C.paper, borderColor: C.line, borderWidth: 1, borderRadius: 22, padding: 24, gap: 17 }, modeDetails: { flexDirection: 'row', gap: 7, alignItems: 'center', paddingVertical: 12, borderTopWidth: 1, borderColor: C.line },
   progressWorld: { borderColor: C.line, borderWidth: 1, borderRadius: 16, backgroundColor: C.paper, padding: 14, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }, progressBadge: { borderWidth: 1, borderColor: C.line, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 10, flexDirection: 'row', gap: 4, alignItems: 'center' },
+  masteryBadges: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'flex-start' }, masteredBadge: { backgroundColor: C.mint, borderColor: C.green },
   history: { backgroundColor: C.paper, padding: 16, borderWidth: 1, borderColor: C.line, borderRadius: 16, flexDirection: 'row', alignItems: 'center', gap: 12 }, historyIcon: { width: 39, height: 39, alignItems: 'center', justifyContent: 'center', borderRadius: 12 },
   guideRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 18, borderBottomWidth: 1, borderColor: C.line, paddingBottom: 24 },
 });

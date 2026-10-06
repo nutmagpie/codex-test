@@ -18,7 +18,11 @@ Each session has three hearts. A wrong answer costs one heart; the third miss en
 
 Answers submit automatically when the expected number of digits has been entered. Backspace can correct an incomplete answer. Single-digit answers submit immediately. Web players can also use the number keys and Backspace. No Enter button is needed.
 
-In Speed and Mastery, correct answers advance to the next card immediately, with no input lock or forced transition delay. A brief success message stays below the new card for 450 ms without interrupting typing. Incorrect answers show a correction for 350 ms before advancing; the clock keeps running. Learn retains a 100 ms success pause and a 1.25-second correction pause.
+In Speed and Mastery, correct answers advance to the next card immediately, with no input lock or forced transition delay. A small checkmark acknowledges success for 450 ms without interrupting typing. Incorrect answers show a red flash and an X for 350 ms before advancing; the clock keeps running. Learn retains a 100 ms success pause and a 1.25-second correction pause. There are no digit hints, motivational messages, placeholder underlines, or equals sign in the answer area.
+
+The keypad adapts to shorter screens and sits at least 32 pixels above the bottom of the safe app viewport, in addition to the native system-bar inset. Questions and answer boxes share a centered vertical axis. At the end of every run, all missed facts are shown with their correct answers and the entered answers, including on a successful Mastery run. Results navigation waits 900 ms after arrival and for at least 450 ms after the last leftover tap, protecting it from rapid keypad taps.
+
+Mastery runs show trophy icons in the latest wins list. Each world on Play shows trophy badges for its mastered ranges, using the same player-specific achievements as Progress.
 
 Addition and multiplication use operands in the selected range. Subtraction keeps both operands in range and produces nonnegative answers (including zero). Division draws its divisor and quotient from the range and builds an exact dividend, so there are no fractions. Shuffled fact banks cover all facts before repeating, avoid adjacent duplicate questions, and balance mixed operations.
 
@@ -51,8 +55,8 @@ npm run test:e2e
 EXPO_OFFLINE=1 npm run build -- --max-workers 2
 ```
 
-- Unit tests exercise all arithmetic worlds/ranges, shuffling, digit counts, timing boundaries, the third-miss limit, 58-of-60 mastery, independent player progress, persistence validation, and bounded history.
-- Playwright tests exercise the real UI at 390×844: keypad/backspace, heart limits, replay, a full mastery run, deadlines, and family profiles across reloads. Frozen-clock checks verify immediate timed transitions, preservation of partially entered answers, feedback timer replacement, and Learn pacing. The suite starts Metro if necessary. It uses `/usr/bin/chromium` in this cloud machine; set `CHROMIUM_PATH` to another installed binary when needed.
+- The 19 unit tests exercise all arithmetic worlds/ranges, shuffling, digit counts, timing boundaries, the third-miss limit, 58-of-60 mastery, complete missed-answer capture, independent player progress, persistence validation, and bounded history.
+- The 15 Playwright tests exercise the real UI: keypad/backspace, heart limits, replay, a full mastery run, deadlines, missed-fact review, trophies, and family profiles across reloads. Frozen-clock checks verify immediate timed transitions, preservation of partially entered answers, feedback timer replacement, Learn pacing, the terminal mistake flash, and results protection from rapid taps and held presses. Layout checks cover 344×740 and 768×720 with simulated native system insets and extra keypad clearance. These are browser checks; a physical Samsung device has not been tested here. The suite starts Metro if necessary. It uses `/usr/bin/chromium` in this cloud machine; set `CHROMIUM_PATH` to another installed binary when needed.
 - `build` exports web JavaScript and iOS/Android Hermes bundles into ignored `dist/`. **Bundle export is not a signed native binary build or device test.**
 
 ## Native distribution
@@ -69,9 +73,9 @@ npx eas-cli build --platform ios --profile preview
 npx eas-cli build --platform all --profile production
 ```
 
-The version 1.0.1 timing update (Android build 2) is submitted to Expo as [build 48b4c0e6-5224-4831-85a8-3c61e21c262f](https://expo.dev/accounts/nutmagpie/projects/60-in-60/builds/48b4c0e6-5224-4831-85a8-3c61e21c262f). It removes the correct-answer transition delay in Speed and Mastery. The build is waiting for an Expo worker; once it finishes, download its APK from that build record to update the existing app.
+Version 1.0.2 (Android build 3) adds the cleaner answer layout, system-bar clearance, red X mistake feedback, complete missed-fact review, protected results controls, and mastery trophies described above. Its updated APK build will be recorded here when submitted.
 
-The initial Android preview build (version 1.0.0), [f705e099-4dc7-4827-ba48-c3e6df8b2fa7](https://expo.dev/accounts/nutmagpie/projects/60-in-60/builds/f705e099-4dc7-4827-ba48-c3e6df8b2fa7), finished successfully. [Download its standalone APK](https://expo.dev/artifacts/eas/ws3ST-6Bxh7JUAWG4c0WBw3EiJqKYnuPpgBJKO52Y-I.apk). This older APK retains the original transition timing. The standalone app runs without a MacBook, Expo Go, or a development server.
+The previous version 1.0.1 timing update (Android build 2), [build 48b4c0e6-5224-4831-85a8-3c61e21c262f](https://expo.dev/accounts/nutmagpie/projects/60-in-60/builds/48b4c0e6-5224-4831-85a8-3c61e21c262f), finished successfully. [Download the previous standalone APK](https://expo.dev/artifacts/eas/1z4B9x4uxQYDo7Q4DfmbZpc2tfRbOVh0Y4-W2HHw5nU.apk). It includes immediate correct-answer advancement in Speed and Mastery; it does not include the 1.0.2 changes. The standalone app runs without a MacBook, Expo Go, or a development server.
 
 The cloud environment could not download the finished APK: Expo's artifact endpoint returned HTTP 403, including through the official EAS download command. APK integrity/signature checks and physical-device installation have therefore not been verified here. Source tests and native bundle exports passed; Expo reports the native build as finished with no error.
 

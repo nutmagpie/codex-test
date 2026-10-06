@@ -3,7 +3,7 @@
     "name": "60-in-60",
     "slug": "60-in-60",
     "icon": "./assets/icon.png",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "scheme": "sixtyin60",
     "userInterfaceStyle": "light",
@@ -13,7 +13,7 @@
     },
     "android": {
       "package": "com.sixtyin60.game",
-      "versionCode": 2,
+      "versionCode": 3,
       "adaptiveIcon": {
         "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#173C37"

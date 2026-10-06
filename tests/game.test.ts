@@ -114,6 +114,7 @@ test('the three modes start with their documented card and timer counts', () => 
     assert.equal(session.status, 'playing');
     assert.equal(session.answered, 0);
     assert.equal(session.lastAnswer, null);
+    assert.deepEqual(session.missedAnswers, []);
     sessionIds.add(session.id);
   }
   assert.equal(sessionIds.size, 3);
@@ -132,6 +133,10 @@ test('mastery passes with 58 correct answers and two mistakes', () => {
   assert.equal(result.id, original.id);
   assert.equal(original.answered, 0, 'submission must preserve the previous state');
   assert.equal(original.hearts, 3);
+  assert.deepEqual(result.missedAnswers, [0, 59].map(index => ({
+    question: original.questions[index], value: original.questions[index].answer + 1, correct: false,
+  })));
+  assert.deepEqual(original.missedAnswers, [], 'reviewing a run must not change its original state');
 });
 
 test('the third mistake ends the run, including on the final card', () => {
@@ -148,6 +153,9 @@ test('the third mistake ends the run, including on the final card', () => {
   assert.equal(session.status, 'failed');
   assert.equal(session.failureReason, 'hearts');
   assert.equal(session.lastAnswer?.correct, false);
+  assert.deepEqual(session.missedAnswers, original.questions.slice(0, 3).map(question => ({
+    question, value: -1, correct: false,
+  })));
   assert.strictEqual(submitAnswer(session, 1), session);
 
   const lastCardFailure = answerAll(original, [0, 1, 59]);
@@ -155,6 +163,27 @@ test('the third mistake ends the run, including on the final card', () => {
   assert.equal(lastCardFailure.correct, 57);
   assert.equal(lastCardFailure.status, 'failed');
   assert.equal(lastCardFailure.failureReason, 'hearts');
+  assert.deepEqual(lastCardFailure.missedAnswers.map(answer => answer.question.id), [0, 1, 59].map(index => original.questions[index].id));
+});
+
+test('missed facts survive later correct answers and timeouts, while a new run starts fresh', () => {
+  const level = getLevel('subtraction-10');
+  for (const mode of ['learn', 'speed', 'mastery'] as const) {
+    const original = createSession(level, mode, seededRandom());
+    const question = original.questions[0];
+    const wrongValue = question.answer + 1;
+    const afterMiss = submitAnswer(original, wrongValue);
+    const afterCorrect = submitAnswer(afterMiss, afterMiss.questions[afterMiss.index].answer);
+    const finalTime = MODES[mode].seconds === null ? 60_000 : MODES[mode].seconds! * 1000;
+    const stopped = tickSession(afterCorrect, finalTime);
+    assert.deepEqual(stopped.missedAnswers, [{ question, value: wrongValue, correct: false }]);
+    assert.equal(stopped.answered, 2, 'an unanswered card at timeout is not a missed submission');
+    assert.equal(stopped.status, mode === 'learn' ? 'playing' : 'failed');
+    assert.equal(stopped.failureReason, mode === 'learn' ? null : 'time');
+    assert.deepEqual(afterMiss.missedAnswers, [{ question, value: wrongValue, correct: false }]);
+    assert.deepEqual(original.missedAnswers, []);
+    assert.deepEqual(createSession(level, mode, seededRandom()).missedAnswers, []);
+  }
 });
 
 test('timers are monotonic and fail exactly at the mode deadline', () => {

@@ -86,6 +86,12 @@ export interface Question {
   symbol: string;
 }
 
+export interface Answer {
+  question: Question;
+  value: number;
+  correct: boolean;
+}
+
 type Fact = Omit<Question, 'id'>;
 const SYMBOLS: Record<Operation, string> = { addition: '+', subtraction: '−', multiplication: '×', division: '÷' };
 
@@ -169,7 +175,8 @@ export interface Session {
   elapsedMs: number;
   status: 'playing' | 'passed' | 'failed';
   failureReason: 'hearts' | 'time' | null;
-  lastAnswer: { question: Question; value: number; correct: boolean } | null;
+  lastAnswer: Answer | null;
+  missedAnswers: Answer[];
 }
 
 let sessionSequence = 0;
@@ -189,6 +196,7 @@ export function createSession(level: Level, mode: Mode, rng: () => number = Math
     status: 'playing',
     failureReason: null,
     lastAnswer: null,
+    missedAnswers: [],
   };
 }
 
@@ -205,6 +213,7 @@ export function submitAnswer(session: Session, value: number): Session {
   const answered = session.answered + 1;
   const outOfHearts = mistakes >= 3;
   const completed = answered === session.questions.length;
+  const lastAnswer: Answer = { question, value, correct };
   return {
     ...session,
     index: session.index + 1,
@@ -214,7 +223,8 @@ export function submitAnswer(session: Session, value: number): Session {
     hearts: Math.max(0, 3 - mistakes),
     status: outOfHearts ? 'failed' : completed ? 'passed' : 'playing',
     failureReason: outOfHearts ? 'hearts' : null,
-    lastAnswer: { question, value, correct },
+    lastAnswer,
+    missedAnswers: correct ? session.missedAnswers : [...session.missedAnswers, lastAnswer],
   };
 }
 

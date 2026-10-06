@@ -28,6 +28,7 @@ function completedRun(mode: Mode = 'mastery', overrides: Partial<Session> = {}):
     status: 'passed',
     failureReason: null,
     lastAnswer: null,
+    missedAnswers: [],
     ...overrides,
   };
 }
