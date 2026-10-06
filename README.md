@@ -73,7 +73,7 @@ npx eas-cli build --platform ios --profile preview
 npx eas-cli build --platform all --profile production
 ```
 
-Version 1.0.2 (Android build 3) adds the cleaner answer layout, system-bar clearance, red X mistake feedback, complete missed-fact review, protected results controls, and mastery trophies described above. Its updated APK build will be recorded here when submitted.
+Version 1.0.2 (Android build 3) adds the cleaner answer layout, system-bar clearance, red X mistake feedback, complete missed-fact review, protected results controls, and mastery trophies described above. Expo accepted [build 5a09b716-6e73-40c4-a9cc-015144068df2](https://expo.dev/accounts/nutmagpie/projects/60-in-60/builds/5a09b716-6e73-40c4-a9cc-015144068df2) from source commit `63f69de3d9956a52dd15afdebe828634136e896f`. It is waiting for an Expo worker; its new APK link will be recorded when the build finishes.
 
 The previous version 1.0.1 timing update (Android build 2), [build 48b4c0e6-5224-4831-85a8-3c61e21c262f](https://expo.dev/accounts/nutmagpie/projects/60-in-60/builds/48b4c0e6-5224-4831-85a8-3c61e21c262f), finished successfully. [Download the previous standalone APK](https://expo.dev/artifacts/eas/1z4B9x4uxQYDo7Q4DfmbZpc2tfRbOVh0Y4-W2HHw5nU.apk). It includes immediate correct-answer advancement in Speed and Mastery; it does not include the 1.0.2 changes. The standalone app runs without a MacBook, Expo Go, or a development server.
 
