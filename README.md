@@ -77,7 +77,7 @@ Version 1.0.2 (Android build 3) adds the cleaner answer layout, system-bar clear
 
 The previous version 1.0.1 timing update (Android build 2), [build 48b4c0e6-5224-4831-85a8-3c61e21c262f](https://expo.dev/accounts/nutmagpie/projects/60-in-60/builds/48b4c0e6-5224-4831-85a8-3c61e21c262f), finished successfully. [Download the previous standalone APK](https://expo.dev/artifacts/eas/1z4B9x4uxQYDo7Q4DfmbZpc2tfRbOVh0Y4-W2HHw5nU.apk). It includes immediate correct-answer advancement in Speed and Mastery; it does not include the 1.0.2 changes. The standalone app runs without a MacBook, Expo Go, or a development server.
 
-The cloud environment could not download the finished APK: Expo's artifact endpoint returned HTTP 403, including through the official EAS download command. APK integrity/signature checks and physical-device installation have therefore not been verified here. Source tests and native bundle exports passed; Expo reports the native build as finished with no error.
+Earlier artifact download attempts in this cloud environment returned HTTP 403 from Expo, including through the official EAS download command. No APK integrity/signature checks or physical-device installation have been verified here. Version 1.0.2 passed type checking, all 19 unit tests, all 15 browser tests, and native bundle exports; its signed APK is still pending in Expo's worker queue.
 
 The iOS preview profile produces a simulator build. Production iOS builds require Apple signing; Android store submission requires a Play Console app and signing configuration. Choose your own unique bundle identifiers before a store release. Store submission has not been completed.
 
