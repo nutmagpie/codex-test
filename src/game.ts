@@ -1,245 +1,77 @@
-/** Pure game rules shared by the mobile UI and its tests. */
+/** Canonical arithmetic facts and the untimed set engine. */
 export type Operation = 'addition' | 'subtraction' | 'multiplication' | 'division';
-export type Mode = 'learn' | 'speed' | 'mastery';
 export type WorldId = Operation | 'add-subtract' | 'multiply-divide' | 'all';
-
-export interface World {
-  id: WorldId;
-  name: string;
-  subtitle: string;
-  symbol: string;
-  color: string;
-  operations: Operation[];
-}
-
+export const OPERATIONS: Operation[] = ['addition', 'subtraction', 'multiplication', 'division'];
+export const SYMBOLS: Record<Operation, string> = { addition: '+', subtraction: '−', multiplication: '×', division: '÷' };
+export interface World { id: WorldId; name: string; subtitle: string; symbol: string; color: string; operations: Operation[] }
 export const WORLDS: World[] = [
-  { id: 'addition', name: 'Addition', subtitle: 'Small sums. Strong foundations.', symbol: '+', color: '#B5ECC5', operations: ['addition'] },
-  { id: 'subtraction', name: 'Subtraction', subtitle: 'Make a little room for less.', symbol: '−', color: '#AADAEF', operations: ['subtraction'] },
-  { id: 'add-subtract', name: 'Addition & subtraction', subtitle: 'Switch gears. Find your rhythm.', symbol: '±', color: '#C8BBF3', operations: ['addition', 'subtraction'] },
-  { id: 'multiplication', name: 'Multiplication', subtitle: 'Little facts. Bigger possibilities.', symbol: '×', color: '#F4CE92', operations: ['multiplication'] },
-  { id: 'division', name: 'Division', subtitle: 'Break it down, one fact at a time.', symbol: '÷', color: '#F4B6B0', operations: ['division'] },
-  { id: 'multiply-divide', name: 'Multiplication & division', subtitle: 'Meet the other side of every fact.', symbol: '×÷', color: '#A9DDD6', operations: ['multiplication', 'division'] },
-  { id: 'all', name: 'All four operations', subtitle: 'Your whole toolkit. One great run.', symbol: '✦', color: '#D9D9F0', operations: ['addition', 'subtraction', 'multiplication', 'division'] },
+  { id: 'addition', name: 'Addition', subtitle: 'Little sums. A strong beginning.', symbol: '+', color: '#B5ECC5', operations: ['addition'] },
+  { id: 'subtraction', name: 'Subtraction', subtitle: 'Find the difference. Feel the progress.', symbol: '−', color: '#AADAEF', operations: ['subtraction'] },
+  { id: 'add-subtract', name: 'Addition & subtraction', subtitle: 'Switch it up. Keep your rhythm.', symbol: '±', color: '#C8BBF3', operations: ['addition', 'subtraction'] },
+  { id: 'multiplication', name: 'Multiplication', subtitle: 'Make your times tables second nature.', symbol: '×', color: '#F4CE92', operations: ['multiplication'] },
+  { id: 'division', name: 'Division', subtitle: 'Break it down. Build it up.', symbol: '÷', color: '#F4B6B0', operations: ['division'] },
+  { id: 'multiply-divide', name: 'Multiplication & division', subtitle: 'Two operations. One smooth flow.', symbol: '×÷', color: '#A9DDD6', operations: ['multiplication', 'division'] },
+  { id: 'all', name: 'All four operations', subtitle: 'Bring it all together.', symbol: '✦', color: '#D9D9F0', operations: ['addition', 'subtraction', 'multiplication', 'division'] },
 ];
-
 export const RANGES = [5, 10, 12] as const;
 export type NumberRange = (typeof RANGES)[number];
-
-export interface Level {
-  id: string;
-  worldId: WorldId;
-  range: NumberRange;
-  name: string;
-}
-
+export interface Level { id: string; worldId: WorldId; range: NumberRange; name: string }
 export function getLevels(worldId: WorldId): Level[] {
-  if (!WORLDS.some(world => world.id === worldId)) {
-    throw new Error(`Unknown world: ${worldId}`);
-  }
+  if (!WORLDS.some(w => w.id === worldId)) throw new Error(`Unknown world: ${worldId}`);
   return RANGES.map(range => ({ id: `${worldId}-${range}`, worldId, range, name: `Numbers 1–${range}` }));
 }
-
 export function getLevel(id: string): Level {
-  for (const world of WORLDS) {
-    const level = getLevels(world.id).find(candidate => candidate.id === id);
-    if (level) return level;
-  }
-  throw new Error(`Unknown level: ${id}`);
+  const level = WORLDS.flatMap(w => getLevels(w.id)).find(l => l.id === id);
+  if (!level) throw new Error(`Unknown level: ${id}`);
+  return level;
 }
-
-export const MODES: Record<Mode, {
-  name: string;
-  tagline: string;
-  description: string;
-  cards: number;
-  seconds: number | null;
-}> = {
-  learn: {
-    name: 'Learn',
-    tagline: 'Accuracy comes first',
-    description: '20 cards, no clock. Take your time and get to know the facts.',
-    cards: 20,
-    seconds: null,
-  },
-  speed: {
-    name: 'Speed',
-    tagline: 'Find your flow',
-    description: '30 cards in 45 seconds. A little pace, a lot of progress.',
-    cards: 30,
-    seconds: 45,
-  },
-  mastery: {
-    name: 'Mastery',
-    tagline: 'Make it your own',
-    description: '60 cards in 60 seconds. Three hearts. One personal milestone.',
-    cards: 60,
-    seconds: 60,
-  },
-};
-
-export interface Question {
-  id: string;
-  left: number;
-  right: number;
-  operation: Operation;
-  answer: number;
-  symbol: string;
+export interface Fact {
+  factKey: string; operation: Operation; a: number; b: number;
+  left: number; right: number; answer: number; symbol: string;
 }
-
-export interface Answer {
-  question: Question;
-  value: number;
-  correct: boolean;
+/** Grid coordinates are the two positive source numbers for every operation. */
+export function makeFact(operation: Operation, a: number, b: number): Fact {
+  if (!OPERATIONS.includes(operation) || !Number.isInteger(a) || !Number.isInteger(b) || a < 1 || b < 1 || a > 12 || b > 12) throw new RangeError('Unknown fact.');
+  return { factKey: `${operation}:${a}:${b}`, operation, a, b,
+    left: operation === 'division' ? a * b : operation === 'subtraction' ? a + b : a,
+    right: b, answer: operation === 'addition' ? a + b : operation === 'multiplication' ? a * b : a,
+    symbol: SYMBOLS[operation] };
 }
-
-type Fact = Omit<Question, 'id'>;
-const SYMBOLS: Record<Operation, string> = { addition: '+', subtraction: '−', multiplication: '×', division: '÷' };
-
-function makeBank(operation: Operation, range: NumberRange): Fact[] {
-  const bank: Fact[] = [];
-  for (let a = 1; a <= range; a++) {
-    for (let b = 1; b <= range; b++) {
-      if (operation === 'subtraction' && b > a) continue;
-      const left = operation === 'division' ? a * b : a;
-      const answer = operation === 'addition' ? a + b
-        : operation === 'subtraction' ? a - b
-        : operation === 'multiplication' ? a * b : a;
-      bank.push({ left, right: b, operation, answer, symbol: SYMBOLS[operation] });
-    }
-  }
-  return bank;
+export function factFromKey(key: string): Fact | null {
+  const [operation, a, b, extra] = key.split(':');
+  if (extra !== undefined || !OPERATIONS.includes(operation as Operation)) return null;
+  try { const f = makeFact(operation as Operation, Number(a), Number(b)); return f.factKey === key ? f : null; } catch { return null; }
 }
-
-function shuffle<T>(values: T[], rng: () => number): T[] {
-  const result = values.slice();
-  for (let i = result.length - 1; i > 0; i--) {
-    const random = rng();
-    if (!Number.isFinite(random) || random < 0 || random >= 1) {
-      throw new RangeError('The random source must return a number from 0 (inclusive) to 1 (exclusive).');
-    }
-    const j = Math.floor(random * (i + 1));
-    [result[i], result[j]] = [result[j], result[i]];
-  }
-  return result;
+export function factBank(operation: Operation, range: NumberRange = 12): Fact[] {
+  return Array.from({ length: range }, (_, a) => Array.from({ length: range }, (_, b) => makeFact(operation, a + 1, b + 1))).flat();
 }
-
-function sameFact(first: Fact | undefined, second: Fact): boolean {
-  return first?.operation === second.operation && first.left === second.left && first.right === second.right;
+export interface Question extends Fact { id: string }
+export interface CreditContext { firstSight: boolean; creditEligible: boolean; creditDate: string; recallBarMs: number }
+export interface Answer extends CreditContext {
+  question: Question; factKey: string; value: number; correct: boolean;
+  firstKeyMs: number; submitMs: number; usedBackspace: boolean; answeredAt: string;
+  typedValue?: string;
 }
-
-/**
- * Visit every fact in an operation before repeating it. Mixed worlds give each
- * operation the same number of turns (within one), with a shuffled turn order.
- */
-export function generateQuestions(level: Level, count: number, rng: () => number = Math.random): Question[] {
-  if (!Number.isSafeInteger(count) || count < 0) {
-    throw new RangeError('The card count must be a nonnegative integer.');
-  }
-  const world = WORLDS.find(candidate => candidate.id === level.worldId);
-  if (!world || !RANGES.includes(level.range)) throw new Error('Unknown level.');
-  const banks = new Map(world.operations.map(operation => [operation, makeBank(operation, level.range)]));
-  const remaining = new Map<Operation, Fact[]>();
-  let operationTurns: Operation[] = [];
-  const questions: Question[] = [];
-
-  while (questions.length < count) {
-    if (operationTurns.length === 0) operationTurns = shuffle(world.operations, rng);
-    const operation = operationTurns.pop()!;
-    let facts = remaining.get(operation);
-    if (!facts?.length) {
-      facts = shuffle(banks.get(operation)!, rng);
-      remaining.set(operation, facts);
-    }
-    const previous = questions.at(-1);
-    const lastIndex = facts.length - 1;
-    if (sameFact(previous, facts[lastIndex])) {
-      const differentIndex = facts.findIndex(fact => !sameFact(previous, fact));
-      if (differentIndex >= 0) [facts[lastIndex], facts[differentIndex]] = [facts[differentIndex], facts[lastIndex]];
-    }
-    const fact = facts.pop()!;
-    questions.push({ ...fact, id: `${level.id}:${questions.length}:${fact.operation}:${fact.left}:${fact.right}` });
-  }
-  return questions;
-}
-
+export interface SetSelection { facts: Fact[]; showWhatYouKnow: boolean; practiceMissed: boolean }
 export interface Session {
-  id: string;
-  level: Level;
-  mode: Mode;
-  questions: Question[];
-  index: number;
-  answered: number;
-  correct: number;
-  mistakes: number;
-  hearts: number;
-  elapsedMs: number;
-  status: 'playing' | 'passed' | 'failed';
-  failureReason: 'hearts' | 'time' | null;
-  lastAnswer: Answer | null;
-  missedAnswers: Answer[];
+  id: string; level: Level; questions: Question[]; answers: Answer[]; index: number;
+  status: 'playing' | 'complete'; elapsedMs: number; startedAt: string;
+  showWhatYouKnow: boolean; practiceMissed: boolean; recallBarMs: number;
 }
-
-let sessionSequence = 0;
-
-export function createSession(level: Level, mode: Mode, rng: () => number = Math.random): Session {
-  return {
-    id: `run-${Date.now().toString(36)}-${(sessionSequence++).toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-    level,
-    mode,
-    questions: generateQuestions(level, MODES[mode].cards, rng),
-    index: 0,
-    answered: 0,
-    correct: 0,
-    mistakes: 0,
-    hearts: 3,
-    elapsedMs: 0,
-    status: 'playing',
-    failureReason: null,
-    lastAnswer: null,
-    missedAnswers: [],
-  };
+let sequence = 0;
+export function createSession(level: Level, selection: SetSelection, recallBarMs: number, now = new Date()): Session {
+  if (!selection.facts.length) throw new Error('A set needs at least one fact.');
+  const id = `set-${now.getTime().toString(36)}-${sequence++}-${Math.random().toString(36).slice(2, 8)}`;
+  return { id, level, questions: selection.facts.map((f, i) => ({ ...f, id: `${id}:${i}` })), answers: [], index: 0, status: 'playing', elapsedMs: 0,
+    startedAt: now.toISOString(), showWhatYouKnow: selection.showWhatYouKnow, practiceMissed: selection.practiceMissed, recallBarMs };
 }
-
-/** The number pad submits as soon as this many digits have been entered. */
-export function expectedDigits(question: Question): number {
-  return String(question.answer).length;
-}
-
-export function submitAnswer(session: Session, value: number): Session {
+export function expectedDigits(question: Pick<Fact, 'answer'>): number { return String(question.answer).length; }
+export function submitAnswer(session: Session, value: number, timing: { firstKeyMs: number; submitMs: number; usedBackspace: boolean; typedValue?: string }, credit: CreditContext, now = new Date()): Session {
   if (session.status !== 'playing') return session;
+  if (!Number.isSafeInteger(value) || value < 0 || !Number.isFinite(timing.firstKeyMs) || timing.firstKeyMs < 0 || !Number.isFinite(timing.submitMs) || timing.submitMs < timing.firstKeyMs) throw new RangeError('Invalid answer.');
   const question = session.questions[session.index];
-  const correct = question.answer === value;
-  const mistakes = session.mistakes + (correct ? 0 : 1);
-  const answered = session.answered + 1;
-  const outOfHearts = mistakes >= 3;
-  const completed = answered === session.questions.length;
-  const lastAnswer: Answer = { question, value, correct };
-  return {
-    ...session,
-    index: session.index + 1,
-    answered,
-    correct: session.correct + (correct ? 1 : 0),
-    mistakes,
-    hearts: Math.max(0, 3 - mistakes),
-    status: outOfHearts ? 'failed' : completed ? 'passed' : 'playing',
-    failureReason: outOfHearts ? 'hearts' : null,
-    lastAnswer,
-    missedAnswers: correct ? session.missedAnswers : [...session.missedAnswers, lastAnswer],
-  };
+  const answer: Answer = { question, factKey: question.factKey, value, correct: value === question.answer, ...timing, typedValue: timing.typedValue ?? String(value), ...credit, answeredAt: now.toISOString() };
+  const index = session.index + 1;
+  return { ...session, index, answers: [...session.answers, answer], recallBarMs: credit.recallBarMs, elapsedMs: session.elapsedMs + (timing.firstKeyMs <= 20_000 ? timing.submitMs : 0), status: index === session.questions.length ? 'complete' : 'playing' };
 }
-
-/** elapsedMs is the absolute run time; a delayed timer can never rewind a run. */
-export function tickSession(session: Session, elapsedMs: number): Session {
-  if (session.status !== 'playing') return session;
-  if (!Number.isFinite(elapsedMs)) throw new RangeError('Elapsed time must be finite.');
-  const nextElapsedMs = Math.max(session.elapsedMs, elapsedMs, 0);
-  const seconds = MODES[session.mode].seconds;
-  const outOfTime = seconds !== null && nextElapsedMs >= seconds * 1000;
-  if (nextElapsedMs === session.elapsedMs && !outOfTime) return session;
-  return {
-    ...session,
-    elapsedMs: nextElapsedMs,
-    status: outOfTime ? 'failed' : 'playing',
-    failureReason: outOfTime ? 'time' : null,
-  };
-}
+export function missedAnswers(session: Session): Answer[] { return session.answers.filter(a => !a.correct); }

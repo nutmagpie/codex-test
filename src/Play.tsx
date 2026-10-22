@@ -1,187 +1,177 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { BackHandler, Modal, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { AccessibilityInfo, Animated, BackHandler, Modal, Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ArrowLeft, ArrowRight, Check, Clock3, Delete, Heart, Home, RotateCcw, X } from 'lucide-react-native';
+import { ArrowLeft, ArrowRight, Check, Delete, X } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
-import { C, Button, Label, Pill, T } from './ui';
-import { createSession, expectedDigits, Level, Mode, MODES, Session, submitAnswer, tickSession, WORLDS } from './game';
-import { TrophyArt } from './art';
+import { Answer, CreditContext, expectedDigits, Question, Session, submitAnswer, WORLDS } from './game';
+import { Profile, RunRecord, sessionRecord } from './profileModel';
+import { coachingLine, factLabel, setWin, strategy } from './coaching';
+import { Button, C, Label, Pill, T } from './ui';
 
-export function GameScreen({ level, mode, playerName, haptics, onFinish, onQuit }: { level: Level; mode: Mode; playerName: string; haptics: boolean; onFinish: (s: Session) => void; onQuit: () => void }) {
-  const [ready, setReady] = useState(mode === 'learn');
-  const [countdown, setCountdown] = useState(3);
-  const [session, setSession] = useState(() => createSession(level, mode));
-  const sessionRef = useRef(session);
-  const [input, setInput] = useState('');
-  const inputRef = useRef('');
-  const [feedback, setFeedback] = useState<Session['lastAnswer']>(null);
-  const busy = useRef(false);
-  const startAt = useRef(Date.now());
-  const timeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const completed = useRef(false);
-  const [quit, setQuit] = useState(false);
-  const world = WORLDS.find(w => w.id === level.worldId)!;
-  const { height, width } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
-  const usableHeight = height - insets.top - insets.bottom;
-  const compact = usableHeight < 760;
-  const short = usableHeight < 650;
+export function GameScreen({ initialSession, playerName, haptics, onPresent, onAnswer, onFinish, onQuit }: {
+  initialSession: Session; playerName: string; haptics: boolean;
+  onPresent: (q: Question, at: Date) => CreditContext; onAnswer: (answer: Answer) => void;
+  onFinish: (session: Session) => void; onQuit: () => void;
+}) {
+  const [session, setSession] = useState(initialSession); const current = useRef(session);
+  const [ready, setReady] = useState(false); const readyRef = useRef(false); const [countdown, setCountdown] = useState(3);
+  const [input, setInput] = useState(''); const inputRef = useRef('');
+  const [waiting, setWaiting] = useState(false); const waitingRef = useRef(false);
+  const [success, setSuccess] = useState(false); const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [quit, setQuit] = useState(false); const completed = useRef(false); const scroll = useRef<ScrollView>(null);
+  const presenter = useRef(onPresent); presenter.current = onPresent;
+  const presentation = useRef<{ questionId: string; startedAt: number; firstKeyMs: number | null; usedBackspace: boolean; credit: CreditContext } | null>(null);
+  const breathe = useRef(new Animated.Value(.86)).current;
+  const { height, width } = useWindowDimensions(); const insets = useSafeAreaInsets();
+  const usableHeight = height - insets.top - insets.bottom; const compact = usableHeight < 760; const short = usableHeight < 650;
   const keyHeight = short ? 48 : compact ? usableHeight < 690 ? 52 : 56 : 62;
-  const seconds = MODES[mode].seconds;
-  const remaining = seconds === null ? null : Math.max(0, seconds - session.elapsedMs / 1000);
-  // Timed successes are a message only; the next card is ready immediately.
-  const heldFeedback = feedback && (mode === 'learn' || !feedback.correct) ? feedback : null;
-  const visibleQuestion = heldFeedback?.question || session.questions[Math.min(session.index, session.questions.length - 1)];
-
+  const world = WORLDS.find(w => w.id === session.level.worldId)!;
+  const begin = useCallback(() => { if (readyRef.current) return; readyRef.current = true; setReady(true); }, []);
   useEffect(() => {
     if (ready) return;
-    const id = setTimeout(() => {
-      if (countdown <= 1) { startAt.current = Date.now(); setReady(true); }
-      else setCountdown(n => n - 1);
-    }, 800);
-    return () => clearTimeout(id);
-  }, [countdown, ready]);
+    const timer = setTimeout(() => countdown <= 1 ? begin() : setCountdown(c => c - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [countdown, ready, begin]);
   useEffect(() => {
-    if (!ready) return;
-    const id = setInterval(() => {
-      const next = tickSession(sessionRef.current, Date.now() - startAt.current);
-      sessionRef.current = next;
-      setSession(next);
-    }, 80);
-    return () => clearInterval(id);
-  }, [ready]);
+    if (ready) return;
+    let disposed = false; let animation: Animated.CompositeAnimation | undefined;
+    const update = (reduced: boolean) => {
+      animation?.stop();
+      if (disposed || reduced) { breathe.setValue(1); return; }
+      animation = Animated.loop(Animated.sequence([
+        Animated.timing(breathe, { toValue: 1, duration: 1500, useNativeDriver: true }),
+        Animated.timing(breathe, { toValue: .86, duration: 1500, useNativeDriver: true }),
+      ])); animation.start();
+    };
+    AccessibilityInfo.isReduceMotionEnabled().then(update).catch(() => update(false));
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', update);
+    return () => { disposed = true; animation?.stop(); subscription.remove(); };
+  }, [ready, breathe]);
+  useLayoutEffect(() => {
+    if (!ready || waiting || session.status !== 'playing') return;
+    const question = session.questions[session.index]; if (presentation.current?.questionId === question.id) return;
+    const now = Date.now();
+    presentation.current = { questionId: question.id, startedAt: now, firstKeyMs: null, usedBackspace: false, credit: presenter.current(question, new Date(now)) };
+  }, [ready, waiting, session.index, session.status, session.questions]);
   useEffect(() => {
-    if (session.status !== 'playing' && !completed.current && !(feedback && !feedback.correct)) { completed.current = true; onFinish(session); }
-  }, [session, feedback, onFinish]);
-  useEffect(() => () => { if (timeout.current) clearTimeout(timeout.current); }, []);
+    if (session.status === 'complete' && !waiting && !completed.current) { completed.current = true; onFinish(session); }
+  }, [session, waiting, onFinish]);
+  useEffect(() => () => { if (feedbackTimer.current) clearTimeout(feedbackTimer.current); }, []);
   useEffect(() => {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => { setQuit(true); return true; });
     return () => subscription.remove();
   }, []);
-
   const pressDigit = useCallback((digit: string) => {
-    if (!ready || busy.current || quit || completed.current || sessionRef.current.status !== 'playing') return;
-    const current = tickSession(sessionRef.current, Date.now() - startAt.current);
-    sessionRef.current = current;
-    if (current.status !== 'playing') { setSession(current); return; }
-    const q = current.questions[current.index];
-    const value = inputRef.current + digit;
-    inputRef.current = value;
-    setInput(value);
-    if (value.length < expectedDigits(q)) return;
-    busy.current = true;
-    const next = submitAnswer(current, Number(value));
-    if (timeout.current) { clearTimeout(timeout.current); timeout.current = null; }
-    sessionRef.current = next;
-    setSession(next);
-    setFeedback(next.lastAnswer);
-    if (haptics && Platform.OS !== 'web') Haptics.notificationAsync(next.lastAnswer?.correct ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Warning).catch(() => {});
-    if (next.status !== 'playing' && next.lastAnswer?.correct) return;
-    const holdCard = mode === 'learn' || !next.lastAnswer?.correct;
-    if (!holdCard) {
-      inputRef.current = ''; setInput(''); busy.current = false;
+    const s = current.current; const p = presentation.current;
+    if (!readyRef.current || waitingRef.current || s.status !== 'playing' || !p || p.questionId !== s.questions[s.index].id) return;
+    const now = Date.now(); p.firstKeyMs ??= Math.max(0, now - p.startedAt);
+    const nextInput = inputRef.current + digit; inputRef.current = nextInput; setInput(nextInput);
+    if (nextInput.length < expectedDigits(s.questions[s.index])) return;
+    if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
+    const next = submitAnswer(s, Number(nextInput), { firstKeyMs: p.firstKeyMs, submitMs: Math.max(p.firstKeyMs, now - p.startedAt), usedBackspace: p.usedBackspace, typedValue: nextInput }, p.credit, new Date(now));
+    const answer = next.answers.at(-1)!;
+    current.current = next; waitingRef.current = !answer.correct;
+    onAnswer(answer); setSession(next); setWaiting(!answer.correct); setSuccess(answer.correct);
+    if (answer.correct) {
+      inputRef.current = ''; setInput('');
+      feedbackTimer.current = setTimeout(() => { setSuccess(false); feedbackTimer.current = null; }, 450);
     }
-    const feedbackMs = holdCard ? next.lastAnswer?.correct ? 100 : mode === 'learn' ? 1250 : 350 : 450;
-    timeout.current = setTimeout(() => {
-      // A success message must never erase digits entered on the next card.
-      if (holdCard) { inputRef.current = ''; setInput(''); busy.current = false; }
-      setFeedback(null); timeout.current = null;
-    }, feedbackMs);
-  }, [ready, quit, haptics, mode]);
+    if (haptics && Platform.OS !== 'web') Haptics.notificationAsync(answer.correct ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Warning).catch(() => {});
+  }, [onAnswer, haptics]);
   const erase = useCallback(() => {
-    if (busy.current || !ready || quit) return;
+    const p = presentation.current;
+    if (!readyRef.current || waitingRef.current || current.current.status !== 'playing' || !p || p.questionId !== current.current.questions[current.current.index].id) return;
+    p.firstKeyMs ??= Math.max(0, Date.now() - p.startedAt); p.usedBackspace = true;
     inputRef.current = inputRef.current.slice(0, -1); setInput(inputRef.current);
-  }, [ready, quit]);
+  }, []);
+  const nextCard = useCallback(() => {
+    if (!waitingRef.current) return;
+    waitingRef.current = false; inputRef.current = ''; setInput(''); setWaiting(false); setSuccess(false);
+    scroll.current?.scrollTo({ y: 0, animated: false });
+  }, []);
   useEffect(() => {
     if (Platform.OS !== 'web') return;
-    const handler = (event: KeyboardEvent) => {
-      if (event.repeat) return;
-      if (/^[0-9]$/.test(event.key)) { event.preventDefault(); pressDigit(event.key); }
-      else if (event.key === 'Backspace' || event.key === 'Delete') { event.preventDefault(); erase(); }
-      else if (event.key === 'Escape') setQuit(true);
+    const handler = (e: KeyboardEvent) => {
+      if (quit || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (!readyRef.current && (/^[0-9]$/.test(e.key) || e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); begin(); return; }
+      if (/^[0-9]$/.test(e.key)) { e.preventDefault(); pressDigit(e.key); }
+      else if (e.key === 'Backspace') { e.preventDefault(); erase(); }
     };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [pressDigit, erase]);
-
-  return <View testID="game-screen" style={s.gameShell}>
-    <ScrollView contentContainerStyle={[s.gameScroll, { gap: short ? 10 : compact ? 12 : 18, paddingHorizontal: width < 360 ? 16 : 20 }]} showsVerticalScrollIndicator={false}>
-      <View style={s.gameTop}><Pressable accessibilityRole="button" accessibilityLabel="Leave session" onPress={() => setQuit(true)} style={s.circleButton}><ArrowLeft size={20} color={C.ink} /></Pressable><View style={{ alignItems: 'center', gap: 4 }}><Label>{MODES[mode].name.toUpperCase()}</Label><T weight="bold" style={{ fontSize: 12 }}>{world.name} · 1–{level.range}</T></View><Pill color={C.mint}>{playerName}</Pill></View>
-      {!ready ? <View style={s.countdown}><Label>FIND YOUR RHYTHM</Label><T weight="display" style={{ fontSize: 106, lineHeight: 120 }}>{countdown}</T><T style={{ fontSize: 17 }}>Take a breath. You've got this.</T><T style={{ color: C.muted, fontSize: 13 }}>{MODES[mode].cards} cards · {seconds} seconds · 3 hearts</T></View> : <>
-        <View style={s.gameStatus}><View style={{ gap: 6 }}><Label>YOUR HEARTS</Label><View style={{ flexDirection: 'row', gap: 6 }} testID="hearts">{[0, 1, 2].map(i => <Heart key={i} size={24} fill={i < session.hearts ? C.coral : 'transparent'} color={i < session.hearts ? C.coral : '#D9DFD5'} strokeWidth={1.5} />)}</View></View><View style={{ alignItems: 'flex-end', gap: 4 }}><Label>{seconds ? 'SECONDS LEFT' : 'TAKE YOUR TIME'}</Label><View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}><Clock3 size={16} color={remaining !== null && remaining < 10 ? C.coral : C.green} /><T weight="display" testID="timer" style={{ fontSize: 27, color: remaining !== null && remaining < 10 ? C.coral : C.ink }}>{remaining === null ? '∞' : Math.ceil(remaining).toString().padStart(2, '0')}</T></View></View></View>
-        <View style={{ gap: 8 }}><View style={s.sectionLine}><T style={{ fontSize: 11, color: C.muted }}>One card at a time.</T><T weight="bold" style={{ fontSize: 11 }} testID="card-count">{session.answered} / {MODES[mode].cards}</T></View><View style={s.track}><View style={[s.trackFill, { width: `${session.answered / MODES[mode].cards * 100}%` }]} /></View></View>
-        <View testID="flash-card" style={[s.flashCard, { minHeight: short ? 170 : compact ? 190 : 216, padding: short ? 14 : compact ? 16 : 21 }, heldFeedback && { borderColor: heldFeedback.correct ? C.green : C.coral, backgroundColor: heldFeedback.correct ? '#F0F7E9' : '#FFF2ED' }]}>
-          <View style={s.sectionLine}><Label>CARD {String(Math.min(session.answered + (heldFeedback ? 0 : 1), MODES[mode].cards)).padStart(2, '0')}</Label><View style={s.feedbackMark} accessibilityLabel={feedback ? feedback.correct ? 'Correct answer' : 'Incorrect answer' : undefined}>{feedback ? feedback.correct ? <Check testID="answer-feedback" size={22} color={C.green} strokeWidth={3} /> : <X testID="mistake-indicator" size={28} color="#AD5139" strokeWidth={3} /> : null}</View></View>
-          <View accessibilityLabel={`${visibleQuestion.left} ${visibleQuestion.symbol} ${visibleQuestion.right}`} testID="question" style={[s.equation, { minHeight: short ? 58 : compact ? 64 : 86 }]}><T weight="display" style={[s.operand, compact && { fontSize: 44 }]}>{visibleQuestion.left}</T><T weight="display" style={[s.operand, compact && { fontSize: 44 }, { color: C.coral }]}>{visibleQuestion.symbol}</T><T weight="display" style={[s.operand, compact && { fontSize: 44 }]}>{visibleQuestion.right}</T></View>
-          <View testID="answer-slots" style={s.answerRow}>{Array.from({ length: expectedDigits(visibleQuestion) }, (_, i) => <View testID={`answer-slot-${i}`} key={i} style={[s.answerSlot, short && { height: 52, width: 52 }, input[i] !== undefined && { borderColor: C.ink, backgroundColor: C.mint }]}><T weight="display" testID={`answer-digit-${i}`} style={{ fontSize: 30 }}>{input[i] ?? ''}</T></View>)}</View>
-          {mode === 'learn' && feedback && !feedback.correct && <T testID="learn-correction" weight="bold" style={{ textAlign: 'center', fontSize: 13, color: '#AD5139' }}>{feedback.question.left} {feedback.question.symbol} {feedback.question.right} = {feedback.question.answer}</T>}
-        </View>
-        <View testID="keypad" style={[s.numberPad, { marginTop: 'auto' }]}>{[['1', '2', '3'], ['4', '5', '6'], ['7', '8', '9'], ['', '0', 'delete']].map((row, i) => <View key={i} style={{ flexDirection: 'row', gap: 12 }}>{row.map(key => key === '' ? <View key="empty" style={{ flex: 1, height: keyHeight }} /> : <Pressable key={key} testID={`key-${key}`} accessibilityRole="button" accessibilityLabel={key === 'delete' ? 'Delete last digit' : key} onPress={() => key === 'delete' ? erase() : pressDigit(key)} style={({ pressed }) => [s.key, { height: keyHeight }, key === 'delete' && { backgroundColor: C.pale }, { opacity: pressed ? .6 : 1, transform: [{ scale: pressed ? .96 : 1 }] }]}>{key === 'delete' ? <Delete size={25} color={C.ink} /> : <T weight="display" style={{ fontSize: 29 }}>{key}</T>}</Pressable>)}</View>)}</View>
-      </>}
-    </ScrollView>
-    <Modal visible={quit} transparent animationType="fade" onRequestClose={() => setQuit(false)}><View style={s.modalBackdrop}><View style={s.modalCard}><Label>A LITTLE PAUSE</Label><T weight="display" style={{ fontSize: 25 }}>Leave this session?</T><T style={{ color: C.muted, lineHeight: 23 }}>This run won't be saved. Your completed sessions and progress are safe.{seconds ? ' The clock keeps running while you decide.' : ''}</T><Button title="Keep going" onPress={() => setQuit(false)} /><Button title="Leave session" variant="ghost" onPress={onQuit} /></View></View></Modal>
+    document.addEventListener('keydown', handler); return () => document.removeEventListener('keydown', handler);
+  }, [pressDigit, erase, begin, quit]);
+  const mistake = waiting ? session.answers.at(-1) : undefined;
+  const question = mistake?.question ?? session.questions[session.index] ?? session.questions.at(-1)!;
+  return <View testID="game-screen" style={{ flex: 1, backgroundColor: C.bg }}>
+    {!ready ? <Pressable testID="countdown" accessibilityRole="button" accessibilityLabel="Skip countdown" onPress={begin} style={s.countdown}>
+      <View style={s.ringBox}><Animated.View style={[s.breathingRing, { transform: [{ scale: breathe }] }]} /><View style={s.innerRing} /><T testID="countdown-number" weight="display" style={{ fontSize: 96, lineHeight: 115 }}>{countdown}</T></View>
+    </Pressable> : <ScrollView ref={scroll} showsVerticalScrollIndicator={false} contentContainerStyle={[s.gameScroll, { gap: short ? 10 : compact ? 12 : 18, paddingHorizontal: width < 360 ? 16 : 20 }]}>
+      <View style={s.gameTop}><Pressable accessibilityRole="button" accessibilityLabel="Leave set" onPress={() => setQuit(true)} style={s.circleButton}><ArrowLeft size={20} color={C.ink} /></Pressable><View style={{ flex: 1, alignItems: 'center', gap: 5 }}><Label>{session.practiceMissed ? 'PRACTICE MISSED' : session.showWhatYouKnow ? 'SHOW WHAT YOU KNOW' : 'YOUR DAILY SET'}</Label><T weight="bold" style={{ fontSize: 12, textAlign: 'center' }}>{world.name} · 1–{session.level.range}</T></View><Pill color={C.mint}>{playerName}</Pill></View>
+      <View style={{ gap: 8 }}><View style={s.sectionLine}><T style={{ fontSize: 11, color: C.muted }}>One card at a time.</T><T weight="bold" testID="card-count" style={{ fontSize: 11 }}>{session.answers.length} / {session.questions.length}</T></View><View style={s.track}><View style={[s.trackFill, { width: `${session.answers.length / session.questions.length * 100}%` }]} /></View></View>
+      <View testID="flash-card" style={[s.flashCard, { padding: short ? 14 : compact ? 16 : 21 }, waiting && { backgroundColor: '#FFF2ED', borderColor: C.coral }]}>
+        <View style={s.sectionLine}><Label>CARD {String(Math.min(session.index + (waiting ? 0 : 1), session.questions.length)).padStart(2, '0')}</Label><View style={s.feedbackMark}>{waiting ? <X testID="mistake-indicator" accessibilityLabel="Incorrect answer" size={28} color="#AD5139" strokeWidth={3} /> : success ? <Check testID="answer-feedback" accessibilityLabel="Correct answer" size={22} color={C.green} strokeWidth={3} /> : null}</View></View>
+        <View testID="question" accessibilityLabel={factLabel(question)} style={[s.equation, { minHeight: short ? 58 : compact ? 64 : 86 }]}><T weight="display" style={[s.operand, compact && { fontSize: 44 }]}>{question.left}</T><T weight="display" style={[s.operand, { color: C.coral }, compact && { fontSize: 44 }]}>{question.symbol}</T><T weight="display" style={[s.operand, compact && { fontSize: 44 }]}>{question.right}</T></View>
+        <View testID="answer-slots" style={s.answerRow}>{Array.from({ length: expectedDigits(question) }, (_, i) => <View key={i} testID={`answer-slot-${i}`} style={[s.answerSlot, short && { width: 52, height: 52 }, input[i] !== undefined && { borderColor: waiting ? C.coral : C.ink, backgroundColor: waiting ? '#FBE4DC' : C.mint }]}><T testID={`answer-digit-${i}`} weight="display" style={{ fontSize: 30 }}>{input[i] ?? ''}</T></View>)}</View>
+        {mistake && <View style={{ gap: 12, paddingTop: 5 }}><T testID="correct-answer" weight="bold" style={{ fontSize: 19, textAlign: 'center' }}>{factLabel(question)} = {question.answer}</T><Button title="Next" icon={ArrowRight} onPress={nextCard} testID="next-card" /></View>}
+      </View>
+      <View testID="keypad" style={[s.numberPad, { marginTop: 'auto' }]}>{[['1', '2', '3'], ['4', '5', '6'], ['7', '8', '9'], ['', '0', 'delete']].map((row, i) => <View key={i} style={{ flexDirection: 'row', gap: 12 }}>{row.map(key => key === '' ? <View key="empty" style={{ flex: 1, height: keyHeight }} /> : <Pressable key={key} testID={`key-${key}`} accessibilityRole="button" accessibilityLabel={key === 'delete' ? 'Delete last digit' : key} disabled={waiting} onPress={() => key === 'delete' ? erase() : pressDigit(key)} style={({ pressed }) => [s.key, { height: keyHeight, opacity: waiting ? .45 : pressed ? .6 : 1 }, key === 'delete' && { backgroundColor: C.pale }]}>{key === 'delete' ? <Delete size={25} color={C.ink} /> : <T weight="display" style={{ fontSize: 29 }}>{key}</T>}</Pressable>)}</View>)}</View>
+    </ScrollView>}
+    <Modal visible={quit} transparent animationType="fade" onRequestClose={() => setQuit(false)}><View style={s.modalBackdrop}><View style={s.modalCard}><Label>A LITTLE PAUSE</Label><T weight="display" style={{ fontSize: 25 }}>Leave this set?</T><T style={{ color: C.muted, lineHeight: 22 }}>The facts you’ve practiced stay saved. This unfinished set won’t appear in your completed sets.</T><Button title="Keep going" onPress={() => setQuit(false)} /><Button title="Leave set" variant="ghost" onPress={onQuit} /></View></View></Modal>
   </View>;
 }
 
-export function ResultScreen({ session, playerName, onReplay, onLevels, onHome }: { session: Session; playerName: string; onReplay: () => void; onLevels: () => void; onHome: () => void }) {
-  const [actionsReady, setActionsReady] = useState(false);
-  const unlockAt = useRef(Date.now() + 900);
-  const unlockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const navigated = useRef(false);
-  const blockedGesture = useRef(false);
-  const armActions = useCallback(() => {
-    if (unlockTimer.current) clearTimeout(unlockTimer.current);
-    unlockTimer.current = setTimeout(() => {
-      unlockTimer.current = null; setActionsReady(true);
-    }, Math.max(0, unlockAt.current - Date.now()));
+function duration(ms: number): string { const sec = Math.round(ms / 1000); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`; }
+function recallTime(ms: number | null): string { return ms === null ? '—' : `${(ms / 1000).toFixed(1)} s`; }
+export function ResultScreen({ session, before, after, onPractice, onAnother, onDone }: { session: Session; before: Profile; after: Profile; onPractice: () => void; onAnother: () => void; onDone: () => void }) {
+  const [actionsReady, setActionsReady] = useState(false); const unlockAt = useRef(Date.now() + 900);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null); const navigated = useRef(false); const blockedGesture = useRef(false);
+  const arm = useCallback(() => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => { timer.current = null; setActionsReady(true); }, Math.max(0, unlockAt.current - Date.now()));
   }, []);
-  useEffect(() => {
-    armActions();
-    return () => { if (unlockTimer.current) clearTimeout(unlockTimer.current); };
-  }, [armActions]);
-  // Catch touches even on disabled buttons. Rapid keypad taps must settle before
-  // the results screen can interpret a fresh tap as a navigation decision.
+  useEffect(() => { arm(); return () => { if (timer.current) clearTimeout(timer.current); }; }, [arm]);
   const noteTouch = useCallback(() => {
-    if (Date.now() < unlockAt.current) {
-      blockedGesture.current = true;
-      unlockAt.current = Math.max(unlockAt.current, Date.now() + 450);
-      setActionsReady(false); armActions();
-    } else blockedGesture.current = false;
+    if (Date.now() < unlockAt.current) { blockedGesture.current = true; unlockAt.current = Math.max(unlockAt.current, Date.now() + 450); setActionsReady(false); arm(); }
+    else blockedGesture.current = false;
     return false;
-  }, [armActions]);
+  }, [arm]);
   const finishTouch = useCallback(() => {
     if (!blockedGesture.current) return;
-    blockedGesture.current = false;
-    unlockAt.current = Math.max(unlockAt.current, Date.now() + 450);
-    setActionsReady(false); armActions();
-  }, [armActions]);
-  const takeAction = (action: () => void) => {
-    if (!actionsReady || blockedGesture.current || Date.now() < unlockAt.current || navigated.current) return;
-    navigated.current = true; action();
-  };
-  const passed = session.status === 'passed';
-  const accuracy = session.answered ? Math.round(session.correct / session.answered * 100) : 0;
-  const world = WORLDS.find(w => w.id === session.level.worldId)!;
-  return <View testID="results-screen" style={{ flex: 1 }} onStartShouldSetResponderCapture={noteTouch} onPointerDownCapture={noteTouch} onPointerDown={noteTouch} onTouchStart={noteTouch} onTouchEnd={finishTouch} onPointerUp={finishTouch}><ScrollView contentContainerStyle={s.resultScroll}><View style={s.result}>
-    <Pill color={passed ? C.mint : '#F8E9B5'}>{passed ? session.mode === 'mastery' ? 'MASTERY UNLOCKED' : 'A LITTLE WIN, WELL EARNED' : 'PRACTICE MAKES POSSIBILITY'}</Pill>
-    <TrophyArt size={155} />
-    <T weight="display" style={{ fontSize: 34, textAlign: 'center', letterSpacing: -1 }}>{passed ? session.mode === 'mastery' ? 'A minute. A milestone.' : 'Look at you grow.' : 'Keep your chin up.'}</T>
-    <T style={{ textAlign: 'center', color: C.muted, fontSize: 14, lineHeight: 23 }}>{passed ? `Nice work, ${playerName}. ${session.mode === 'mastery' ? 'You’ve made these facts your own.' : 'Every session is a step toward confidence.'}` : session.failureReason === 'time' ? `Time's up, ${playerName}. Your rhythm is getting stronger. Give it another go.` : `Three little slips. A whole lot of learning. Take a breath, ${playerName}, and try again.`}</T>
-    <T weight="bold" style={{ fontSize: 12, color: C.green }}>{world.name} · 1–{session.level.range} · {MODES[session.mode].name}</T>
-    <View style={s.resultStats}><ResultStat label="CORRECT" value={`${session.correct}/${MODES[session.mode].cards}`} /><ResultStat label="ACCURACY" value={`${accuracy}%`} /><ResultStat label="TIME" value={`${(session.elapsedMs / 1000).toFixed(1)}s`} /></View>
-    {session.missedAnswers.length > 0 && <View testID="missed-facts-review" style={s.correction}><T weight="bold" style={{ fontSize: 14 }}>Missed facts to review</T>{session.missedAnswers.map((answer, index) => <View key={answer.question.id} testID={`missed-fact-${index}`} style={s.reviewFact}><T weight="display" style={{ fontSize: 23, textAlign: 'center' }}>{answer.question.left} {answer.question.symbol} {answer.question.right} = {answer.question.answer}</T><T style={{ color: C.muted, fontSize: 12 }}>You answered {answer.value}</T></View>)}</View>}
-    <View testID="result-actions" accessibilityState={{ disabled: !actionsReady }} style={{ width: '100%', gap: 10 }}><Button title={passed ? 'Another little win?' : 'Try again'} icon={RotateCcw} disabled={!actionsReady} onPress={() => takeAction(onReplay)} /><Button title="Choose a mode" variant="secondary" icon={ArrowRight} disabled={!actionsReady} onPress={() => takeAction(onLevels)} /><Button title="Back to worlds" variant="ghost" icon={Home} disabled={!actionsReady} onPress={() => takeAction(onHome)} /></View>
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}><Check size={13} color={C.green} /><T style={{ fontSize: 11, color: C.green }}>Your effort has been added to your progress.</T></View>
-  </View></ScrollView></View>;
+    blockedGesture.current = false; unlockAt.current = Math.max(unlockAt.current, Date.now() + 450); setActionsReady(false); arm();
+  }, [arm]);
+  const act = (action: () => void) => { if (!actionsReady || blockedGesture.current || Date.now() < unlockAt.current || navigated.current) return; navigated.current = true; action(); };
+  const run = sessionRecord(session); const last: RunRecord | undefined = before.history.find(r => r.levelId === session.level.id && r.practiceMissed === session.practiceMissed && r.answered === run.answered);
+  const misses = session.answers.filter(a => !a.correct); const coach = coachingLine(session); const win = setWin(session, before, after, new Date(after.history[0]?.createdAt ?? Date.now()));
+  const hasTiming = run.medianMs !== null;
+  return <View testID="results-screen" style={{ flex: 1 }} onStartShouldSetResponderCapture={noteTouch} onPointerDownCapture={noteTouch} onPointerDown={noteTouch} onTouchStart={noteTouch} onTouchEnd={finishTouch} onPointerUp={finishTouch}><ScrollView contentContainerStyle={s.resultScroll}>
+    <View style={s.result}>
+      <Pill color={C.mint}>{session.practiceMissed ? 'PRACTICE COMPLETE' : 'SET COMPLETE'} · {WORLDS.find(w => w.id === session.level.worldId)!.symbol} 1–{session.level.range}</Pill>
+      <View style={s.stats}>
+        <Stat label="ACCURACY" value={`${run.correct}/${run.answered}`} previous={last ? `${last.correct}/${last.answered}` : null} improved={!!last && run.correct / run.answered > last.correct / last.answered} />
+        <Stat label="TIME" value={hasTiming ? duration(run.elapsedMs) : '—'} previous={last && last.medianMs !== null ? duration(last.elapsedMs) : null} improved={!!last && hasTiming && run.elapsedMs < last.elapsedMs} />
+        <Stat label="PER FACT" value={recallTime(run.medianMs)} previous={last && last.medianMs !== null ? recallTime(last.medianMs) : null} improved={!!last && run.medianMs !== null && last.medianMs !== null && run.medianMs < last.medianMs} />
+      </View>
+      {win && <View testID="set-win" style={s.resultCard}><Label color={C.green}>WINS</Label><T weight="display" style={{ fontSize: 23, lineHeight: 28 }}>{win.title}</T>{win.facts.length > 0 && <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{win.facts.map(f => <View key={f.factKey} style={s.factChip}><T weight="display" style={{ fontSize: 18, color: 'white' }}>{factLabel(f)}</T></View>)}</View>}</View>}
+      {(misses.length > 0 || coach) && <View testID="missed-facts-review" style={s.resultCard}>
+        <Label>{misses.length ? 'MISSED' : 'NEXT STEP'}</Label>
+        {coach && <T testID="coaching-line" style={{ fontSize: 14, lineHeight: 21 }}>{coach}</T>}
+        {misses.map((answer, i) => <View testID={`missed-fact-${i}`} key={answer.question.id} style={[s.reviewFact, (i > 0 || !!coach) && { borderTopWidth: 1, borderColor: C.line }]}><View style={{ flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}><T weight="bold" style={{ fontSize: 15 }}>{factLabel(answer.question)} = {answer.question.answer}</T><T style={{ fontSize: 13, color: C.muted }}>you typed {answer.typedValue ?? answer.value}</T></View><T style={{ fontSize: 13, lineHeight: 20, color: '#4E5B55' }}>{strategy(answer.question)}</T></View>)}
+      </View>}
+      <View testID="result-actions" accessibilityState={{ disabled: !actionsReady }} style={{ gap: 8, marginTop: 'auto', paddingTop: 8 }}>
+        {misses.length > 0 && <Button title={`Practice missed (${misses.length})`} disabled={!actionsReady} onPress={() => act(onPractice)} testID="practice-missed" style={{ borderRadius: 28, minHeight: 52 }} />}
+        <View style={{ flexDirection: 'row', gap: 8 }}><Button title={session.showWhatYouKnow ? 'Keep going' : 'Another set'} variant="ghost" disabled={!actionsReady} onPress={() => act(onAnother)} testID="another-set" style={{ flex: 1, paddingHorizontal: 12, borderRadius: 24, backgroundColor: C.paper }} /><Button title="Done" variant="ghost" disabled={!actionsReady} onPress={() => act(onDone)} testID="done-set" style={{ flex: 1, borderWidth: 0 }} /></View>
+      </View>
+    </View>
+  </ScrollView></View>;
 }
-function ResultStat({ label, value }: { label: string; value: string }) { return <View style={{ alignItems: 'center', gap: 8, flex: 1 }}><Label>{label}</Label><T weight="display" style={{ fontSize: 25 }}>{value}</T></View>; }
-
+function Stat({ label, value, previous, improved }: { label: string; value: string; previous: string | null; improved: boolean }) {
+  return <View style={s.stat}><T weight="bold" style={{ fontSize: 10, color: C.muted, letterSpacing: 1 }}>{label}</T><T testID={`stat-${label.toLowerCase().replace(' ', '-')}`} weight="display" style={{ fontSize: 24 }}>{value}</T><T style={{ fontSize: 11, color: improved ? C.green : C.muted }}>{previous === null ? '—' : `was ${previous}`}</T></View>;
+}
 const s = StyleSheet.create({
-  gameShell: { flex: 1, backgroundColor: C.bg }, gameScroll: { padding: 20, paddingTop: 12, width: '100%', maxWidth: 510, alignSelf: 'center', flexGrow: 1, gap: 18, paddingBottom: 32 }, gameTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 2 }, circleButton: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', backgroundColor: C.paper, borderRadius: 14, borderWidth: 1, borderColor: C.line },
-  countdown: { minHeight: 560, alignItems: 'center', justifyContent: 'center', gap: 20 }, gameStatus: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, sectionLine: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }, track: { height: 5, borderRadius: 10, backgroundColor: C.line, overflow: 'hidden' }, trackFill: { height: 5, backgroundColor: C.green, borderRadius: 10 },
-  flashCard: { borderRadius: 24, backgroundColor: C.paper, borderWidth: 1, borderColor: C.line, padding: 21, minHeight: 240, gap: 8 }, equation: { flexDirection: 'row', gap: 21, alignItems: 'center', justifyContent: 'center', minHeight: 86 }, operand: { fontSize: 51, letterSpacing: -2 }, answerSlot: { width: 56, height: 58, borderWidth: 1.5, borderColor: C.line, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: C.bg },
-  answerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 9 }, feedbackMark: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
-  numberPad: { gap: 11 }, key: { flex: 1, height: 62, borderRadius: 17, borderWidth: 1, borderColor: C.line, backgroundColor: C.paper, alignItems: 'center', justifyContent: 'center' }, modalBackdrop: { flex: 1, backgroundColor: '#173C3777', alignItems: 'center', justifyContent: 'center', padding: 24 }, modalCard: { backgroundColor: C.bg, borderRadius: 24, padding: 28, gap: 20, width: '100%', maxWidth: 410 },
-  resultScroll: { padding: 25, alignItems: 'center', flexGrow: 1, justifyContent: 'center' }, result: { width: '100%', maxWidth: 440, gap: 22, alignItems: 'center', paddingVertical: 25 }, resultStats: { width: '100%', paddingVertical: 25, borderRadius: 20, backgroundColor: C.paper, borderWidth: 1, borderColor: C.line, flexDirection: 'row' }, correction: { backgroundColor: '#F8E9B5', borderRadius: 17, width: '100%', alignItems: 'center', padding: 18, gap: 7 },
-  reviewFact: { alignItems: 'center', gap: 5, paddingVertical: 9, width: '100%' },
+  countdown: { flex: 1, alignItems: 'center', justifyContent: 'center' }, ringBox: { width: 240, height: 240, alignItems: 'center', justifyContent: 'center' }, breathingRing: { position: 'absolute', width: 240, height: 240, borderRadius: 120, backgroundColor: C.mint }, innerRing: { position: 'absolute', width: 170, height: 170, borderRadius: 85, backgroundColor: C.paper, borderWidth: 1, borderColor: C.line },
+  gameScroll: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 32, width: '100%', maxWidth: 510, alignSelf: 'center', flexGrow: 1 }, gameTop: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 2 }, circleButton: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: C.paper, borderWidth: 1, borderColor: C.line },
+  sectionLine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, track: { height: 5, backgroundColor: C.line, borderRadius: 8, overflow: 'hidden' }, trackFill: { height: 5, backgroundColor: C.green, borderRadius: 8 },
+  flashCard: { borderRadius: 24, borderWidth: 1, borderColor: C.line, backgroundColor: C.paper, gap: 8 }, feedbackMark: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' }, equation: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 21 }, operand: { fontSize: 51, letterSpacing: -2 }, answerRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 9, paddingBottom: 2 }, answerSlot: { width: 56, height: 58, borderWidth: 1.5, borderRadius: 13, borderColor: C.line, backgroundColor: C.bg, justifyContent: 'center', alignItems: 'center' },
+  numberPad: { gap: 11 }, key: { flex: 1, borderRadius: 17, backgroundColor: C.paper, borderColor: C.line, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  modalBackdrop: { flex: 1, backgroundColor: '#173C3777', alignItems: 'center', justifyContent: 'center', padding: 24 }, modalCard: { padding: 26, borderRadius: 24, backgroundColor: C.bg, width: '100%', maxWidth: 410, gap: 20 },
+  resultScroll: { flexGrow: 1, paddingHorizontal: 16, paddingTop: 20, paddingBottom: 32, alignItems: 'center' }, result: { width: '100%', maxWidth: 510, flexGrow: 1, gap: 16 }, stats: { flexDirection: 'row', gap: 8 }, stat: { flex: 1, minWidth: 0, backgroundColor: C.paper, borderRadius: 14, borderWidth: 1, borderColor: C.line, paddingVertical: 12, paddingHorizontal: 10, gap: 4 }, resultCard: { backgroundColor: C.paper, borderRadius: 18, borderWidth: 1, borderColor: C.line, padding: 16, gap: 12 }, factChip: { backgroundColor: C.green, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 12 }, reviewFact: { gap: 5, paddingTop: 12 },
 });

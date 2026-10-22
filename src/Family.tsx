@@ -4,17 +4,19 @@ import { ArrowRight, Check, ChevronRight, Pencil, Plus, Smartphone, Sparkles, Tr
 import {
   addProfile, AVATARS, deleteProfile, getActiveProfile, PROFILE_COLORS, selectProfile,
   type AppState, type Profile,
+  validBirthYear,
 } from './profiles';
+import { ageFromBirthYear, knownCount } from './recall';
 import { Button, C, Label, Pill, T } from './ui';
 
-type Editor = { id: string | null; name: string; avatar: string; color: string };
+type Editor = { id: string | null; name: string; avatar: string; color: string; birthYear: string };
 
 function avatarEmoji(profile: Pick<Profile, 'avatar'>): string {
   return AVATARS.find((avatar) => avatar.id === profile.avatar)?.emoji ?? AVATARS[0].emoji;
 }
 
 function masteredCount(profile: Profile): number {
-  return Object.values(profile.progress).filter((level) => level.mastery).length;
+  return knownCount(profile.facts);
 }
 
 function Avatar({ profile, size = 54 }: { profile: Pick<Profile, 'avatar' | 'color'>; size?: number }) {
@@ -39,6 +41,7 @@ export function FamilyScreen({ state, onChange, wide }: {
       name: profile?.name ?? '',
       avatar: profile?.avatar ?? AVATARS[state.profiles.length % AVATARS.length].id,
       color: profile?.color ?? PROFILE_COLORS[state.profiles.length % PROFILE_COLORS.length],
+      birthYear: profile?.birthYear?.toString() ?? '',
     });
   }
 
@@ -49,14 +52,19 @@ export function FamilyScreen({ state, onChange, wide }: {
       setError('A name with 1–20 characters will do nicely.');
       return;
     }
+    const birthYear = Number(editor.birthYear);
+    if (!/^\d{4}$/.test(editor.birthYear) || !validBirthYear(birthYear)) {
+      setError(`Enter a birth year from 1900 to ${new Date().getFullYear()}.`);
+      return;
+    }
     if (editor.id) {
       onChange({
         ...state,
         profiles: state.profiles.map((profile) => profile.id === editor.id
-          ? { ...profile, name, avatar: editor.avatar, color: editor.color } : profile),
+          ? { ...profile, name, avatar: editor.avatar, color: editor.color, birthYear } : profile),
       });
     } else {
-      onChange(addProfile(state, name, editor.avatar, editor.color));
+      onChange(addProfile(state, name, editor.avatar, editor.color, birthYear));
     }
     setEditor(null);
     setError('');
@@ -91,7 +99,7 @@ export function FamilyScreen({ state, onChange, wide }: {
               <Avatar profile={profile} />
               <View style={{ flex: 1, gap: 5 }}>
                 <View style={s.playerName}><T weight="bold" style={{ fontSize: 18, flexShrink: 1 }}>{profile.name}</T>{isActive && <Pill color={C.mint} ink={C.green}>PLAYING NOW</Pill>}</View>
-                <T style={{ color: C.muted, fontSize: 12 }}>{mastered} {mastered === 1 ? 'level' : 'levels'} mastered · {profile.history.length} recent {profile.history.length === 1 ? 'run' : 'runs'}</T>
+                <T style={{ color: C.muted, fontSize: 12, lineHeight: 19 }}>{profile.birthYear === null ? 'Add birth year' : `Age ${ageFromBirthYear(profile.birthYear)}`} · {mastered} facts by heart · {profile.history.length} recent {profile.history.length === 1 ? 'set' : 'sets'}</T>
               </View>
             </View>
             <View style={s.profileActions}>
@@ -139,6 +147,11 @@ export function FamilyScreen({ state, onChange, wide }: {
               style={s.input}
             />
             <T style={{ color: error ? '#A64B36' : C.muted, fontSize: 12 }} accessibilityLiveRegion="polite">{error || 'A first name or nickname. Up to 20 characters.'}</T>
+          </View>
+          <View style={{ gap: 8 }}>
+            <T weight="bold" style={{ fontSize: 13 }}>Birth year</T>
+            <TextInput value={editor.birthYear} onChangeText={birthYear => { setEditor({ ...editor, birthYear: birthYear.replace(/\D/g, '') }); setError(''); }} placeholder="e.g. 2016" placeholderTextColor={C.muted} maxLength={4} keyboardType="number-pad" accessibilityLabel="Birth year" testID="profile-birth-year" style={s.input} />
+            <T style={{ color: C.muted, fontSize: 12, lineHeight: 18 }}>Sets a starting recall pace. Saved only on this device.</T>
           </View>
           <View style={{ gap: 10 }}>
             <T weight="bold" style={{ fontSize: 13 }}>Pick your little sidekick</T>
@@ -193,7 +206,7 @@ export function ProfilePicker({ state, onChange, onClose, onFamily }: {
         const mastered = masteredCount(profile);
         return <Pressable key={profile.id} accessibilityRole="button" accessibilityLabel={`Play as ${profile.name}`} accessibilityState={{ selected: isActive }} testID={`select-profile-${profile.id}`} onPress={() => { onChange(selectProfile(state, profile.id)); onClose(); }} style={({ pressed }) => [s.pickerRow, { backgroundColor: isActive ? C.pale : C.paper, borderColor: isActive ? '#B5D6B7' : C.line, opacity: pressed ? .75 : 1 }]}>
           <Avatar profile={profile} size={46} />
-          <View style={{ flex: 1, gap: 4 }}><T weight="bold" style={{ fontSize: 16 }}>{profile.name}</T><T style={{ color: C.muted, fontSize: 12 }}>{mastered} {mastered === 1 ? 'level' : 'levels'} mastered</T></View>
+          <View style={{ flex: 1, gap: 4 }}><T weight="bold" style={{ fontSize: 16 }}>{profile.name}</T><T style={{ color: C.muted, fontSize: 12 }}>{mastered} facts by heart</T></View>
           {isActive ? <Check size={21} color={C.green} /> : <ChevronRight size={20} color={C.muted} />}
         </Pressable>;
       })}

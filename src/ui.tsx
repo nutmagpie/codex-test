@@ -3,8 +3,8 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, TextProps, View, ViewSt
 import { ArrowUpRight, LucideIcon } from 'lucide-react-native';
 
 export const C = {
-  ink: '#173C37', muted: '#72807A', bg: '#F7F7F0', paper: '#FFFFFF', line: '#E2E7DD',
-  mint: '#DDEFCB', green: '#37734E', coral: '#F37858', yellow: '#F4D879', pale: '#EDF1E8',
+  ink: '#173C37', muted: '#5F6D67', bg: '#F7F7F0', paper: '#FFFFFF', line: '#E2E7DD',
+  mint: '#DDEFCB', green: '#37734E', coral: '#D2593B', yellow: '#F4D879', pale: '#EDF1E8',
 };
 
 export function T({ style, weight = 'regular', ...props }: TextProps & { weight?: 'regular' | 'medium' | 'bold' | 'display' }) {

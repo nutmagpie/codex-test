@@ -9,9 +9,11 @@ import { DMSans_700Bold } from '@expo-google-fonts/dm-sans/700Bold';
 import { SpaceGrotesk_700Bold } from '@expo-google-fonts/space-grotesk/700Bold';
 import { ArrowUpRight, BookOpen, ChevronDown, Gamepad2, Leaf, Sparkles, TrendingUp, Users, X } from 'lucide-react-native';
 import { AVATARS, AppState, createDefaultState, getActiveProfile, loadState, recordSession, saveState } from './src/profiles';
-import { Level, Mode, Session, WorldId, WORLDS } from './src/game';
+import { Answer, CreditContext, createSession, Level, Question, Session, WorldId, WORLDS } from './src/game';
+import { presentFact, practiceSelection, recallBar, recordRecall, selectSet } from './src/recall';
+import { Profile } from './src/profileModel';
 import { Brand, C, Label, Loading, T } from './src/ui';
-import { GuideScreen, Home, ModeScreen, ProgressScreen, WorldScreen } from './src/Lobby';
+import { GuideScreen, Home, ProgressScreen, WorldScreen } from './src/Lobby';
 import { FamilyScreen, ProfilePicker } from './src/Family';
 import { GameScreen, ResultScreen } from './src/Play';
 
@@ -30,13 +32,14 @@ export default function App() {
 function Application() {
   const [fontsLoaded, fontError] = useFonts({ DMSans_400Regular, DMSans_500Medium, DMSans_700Bold, SpaceGrotesk_700Bold });
   const [state, setState] = useState<AppState>(() => createDefaultState());
+  const stateRef = useRef(state);
+  const changeState = useCallback((next: AppState) => { stateRef.current = next; setState(next); }, []);
   const [loaded, setLoaded] = useState(false);
   const [storageError, setStorageError] = useState('');
   const [tab, setTab] = useState<Tab>('play');
   const [world, setWorld] = useState<WorldId | null>(null);
-  const [level, setLevel] = useState<Level | null>(null);
-  const [run, setRun] = useState<{ level: Level; mode: Mode; profileId: string; key: number } | null>(null);
-  const [result, setResult] = useState<Session | null>(null);
+  const [run, setRun] = useState<{ session: Session; before: Profile; profileId: string } | null>(null);
+  const [result, setResult] = useState<{ session: Session; before: Profile; after: Profile } | null>(null);
   const [picker, setPicker] = useState(false);
   const { width } = useWindowDimensions();
   const desktop = width >= 900;
@@ -48,7 +51,7 @@ function Application() {
 
   useEffect(() => {
     let active = true;
-    loadState().then(saved => { if (active) { setState(saved); setLoaded(true); } });
+    loadState().then(saved => { if (active) { changeState(saved); setLoaded(true); } });
     if (Platform.OS === 'web') document.title = '60-in-60 · A little practice. A lot of possibility.';
     return () => { active = false; };
   }, []);
@@ -57,34 +60,49 @@ function Application() {
     const revision = ++saveRevision.current;
     saveState(state).then(() => { if (revision === saveRevision.current) setStorageError(''); }).catch(() => { if (revision === saveRevision.current) setStorageError('Progress could not be saved on this device. Check available storage, then reload to try again.'); });
   }, [state, loaded]);
-  useEffect(() => { scroll.current?.scrollTo({ y: 0, animated: false }); }, [tab, world, level, profile.id]);
+  useEffect(() => { scroll.current?.scrollTo({ y: 0, animated: false }); }, [tab, world, profile.id]);
   useEffect(() => {
     if (run) return;
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
       if (picker) { setPicker(false); return true; }
       if (result) { setResult(null); return true; }
-      if (level) { setLevel(null); return true; }
       if (world) { setWorld(null); return true; }
       if (tab !== 'play') { setTab('play'); return true; }
       return false;
     });
     return () => subscription.remove();
-  }, [run, picker, result, level, world, tab]);
+  }, [run, picker, result, world, tab]);
 
-  const goTab = (next: Tab) => { setTab(next); setWorld(null); setLevel(null); setResult(null); };
-  const selectWorld = (id: WorldId) => { setTab('play'); setWorld(id); setLevel(null); };
-  const selectLevel = (next: Level) => { setTab('play'); setWorld(next.worldId); setLevel(next); };
-  const start = (mode: Mode, nextLevel = level!) => { setResult(null); setRun({ level: nextLevel, mode, profileId: profile.id, key: Date.now() }); };
+  const goTab = (next: Tab) => { setTab(next); setWorld(null); setResult(null); };
+  const selectWorld = (id: WorldId) => { setTab('play'); setWorld(id); };
+  const start = (level: Level, misses?: Answer[]) => {
+    const player = getActiveProfile(stateRef.current)!;
+    const selection = misses ? practiceSelection(misses) : selectSet(level, player);
+    if (!selection.facts.length) return;
+    setResult(null); setRun({ session: createSession(level, selection, recallBar(player)), before: player, profileId: player.id });
+  };
+  const showCard = useCallback((question: Question, at: Date): CreditContext => {
+    const previous = stateRef.current; const player = previous.profiles.find(p => p.id === run!.profileId)!;
+    const shown = presentFact(player, question.factKey, at, run!.session.practiceMissed);
+    if (shown.data !== player) changeState({ ...previous, profiles: previous.profiles.map(p => p.id === player.id ? { ...player, ...shown.data } : p) });
+    return shown.credit;
+  }, [run, changeState]);
+  const answerCard = useCallback((answer: Answer) => {
+    const previous = stateRef.current;
+    changeState({ ...previous, profiles: previous.profiles.map(p => p.id === run!.profileId ? { ...p, ...recordRecall(p, answer, answer.recallBarMs) } : p) });
+  }, [run, changeState]);
   const finish = useCallback((session: Session) => {
     if (!run) return;
-    setState(previous => ({ ...previous, profiles: previous.profiles.map(p => p.id === run.profileId ? recordSession(p, session) : p) }));
-    setResult(session); setRun(null);
-  }, [run]);
+    const previous = stateRef.current;
+    const after = recordSession(previous.profiles.find(p => p.id === run.profileId)!, session);
+    changeState({ ...previous, profiles: previous.profiles.map(p => p.id === run.profileId ? after : p) });
+    setResult({ session, before: run.before, after }); setRun(null);
+  }, [run, changeState]);
 
   if (!loaded || (!fontsLoaded && !fontError)) return <Loading />;
 
-  if (run) return <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}><GameScreen key={run.key} level={run.level} mode={run.mode} playerName={profile.name} haptics={state.haptics} onFinish={finish} onQuit={() => setRun(null)} /></SafeAreaView>;
-  if (result) return <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}><ResultScreen session={result} playerName={profile.name} onReplay={() => start(result.mode, result.level)} onLevels={() => { selectLevel(result.level); setResult(null); }} onHome={() => goTab('play')} />{storageError ? <T accessibilityRole="alert" style={s.storageError}>{storageError}</T> : null}</SafeAreaView>;
+  if (run) return <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}><GameScreen key={run.session.id} initialSession={run.session} playerName={profile.name} haptics={state.haptics} onPresent={showCard} onAnswer={answerCard} onFinish={finish} onQuit={() => setRun(null)} />{storageError ? <T accessibilityRole="alert" style={s.storageError}>{storageError}</T> : null}</SafeAreaView>;
+  if (result) return <SafeAreaView style={{ flex: 1, backgroundColor: C.bg }}><ResultScreen session={result.session} before={result.before} after={result.after} onPractice={() => start(result.session.level, result.session.answers)} onAnother={() => start(result.session.level)} onDone={() => goTab('play')} />{storageError ? <T accessibilityRole="alert" style={s.storageError}>{storageError}</T> : null}</SafeAreaView>;
 
   return <SafeAreaView style={s.app} edges={['top', 'left', 'right', 'bottom']}>
     {desktop && <View style={s.sidebar}>
@@ -96,24 +114,24 @@ function Application() {
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingTop: 25 }}><View style={s.dot} /><T style={{ fontSize: 10, color: C.muted }}>Made for every curious mind.</T></View>
     </View>}
     <View style={{ flex: 1 }}>
-      <View style={[s.topbar, !desktop && { paddingHorizontal: 20, minHeight: 73 }]}>
-        {desktop ? <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}><Sparkles size={14} color={C.green} /><Label>THE PRACTICE CLUB</Label></View> : <Brand compact />}
+      <View style={[s.topbar, !desktop && { paddingHorizontal: 16, minHeight: 64 }]}>
+        <Brand compact />
         <Pressable testID="profile-picker" accessibilityRole="button" accessibilityLabel={`Switch player, current player ${profile.name}`} onPress={() => setPicker(true)} style={s.profileButton}>
           <View style={[s.avatar, { backgroundColor: profile.color }]}><T style={{ fontSize: 20 }}>{avatar}</T></View><T weight="bold" style={{ fontSize: 12, maxWidth: 110 }} numberOfLines={1}>{profile.name}</T><ChevronDown size={14} color={C.muted} />
         </Pressable>
       </View>
       {storageError ? <T accessibilityRole="alert" style={s.storageError}>{storageError}</T> : null}
-      <ScrollView ref={scroll} showsVerticalScrollIndicator={false} contentContainerStyle={[s.contentContainer, !desktop && { padding: 20, paddingBottom: 30 }]}>
+      <ScrollView ref={scroll} showsVerticalScrollIndicator={false} contentContainerStyle={[s.contentContainer, !desktop && { padding: 16, paddingBottom: 30 }]}>
         <View style={{ width: '100%', maxWidth: 1040, alignSelf: 'center' }}>
-          {tab === 'play' ? level ? <ModeScreen level={level} profile={profile} wide={wide} onStart={start} onBack={() => setLevel(null)} /> : world ? <WorldScreen world={WORLDS.find(w => w.id === world)!} profile={profile} wide={wide} onBack={() => setWorld(null)} onLevel={selectLevel} /> : <Home profile={profile} wide={wide} onWorld={selectWorld} onLevel={selectLevel} />
-            : tab === 'progress' ? <ProgressScreen profile={profile} wide={wide} onLevel={selectLevel} />
-              : tab === 'family' ? <FamilyScreen state={state} onChange={setState} wide={wide} /> : <GuideScreen />}
+          {tab === 'play' ? world ? <WorldScreen world={WORLDS.find(w => w.id === world)!} profile={profile} wide={wide} onBack={() => setWorld(null)} onStart={start} /> : <Home profile={profile} wide={wide} onWorld={selectWorld} />
+            : tab === 'progress' ? <ProgressScreen profile={profile} wide={wide} onWorld={selectWorld} />
+              : tab === 'family' ? <FamilyScreen state={state} onChange={changeState} wide={wide} /> : <GuideScreen />}
           <View style={s.footer}><Brand compact /><T style={{ color: C.muted, fontSize: 10 }}>Less pressure. More possibility.</T><T style={{ color: C.muted, fontSize: 10 }}>MADE TO GROW WITH YOU ↗</T></View>
         </View>
       </ScrollView>
       {!desktop && <View style={s.bottomNav}>{navigation.map(n => <NavItem key={n.id} item={n} compact active={tab === n.id} onPress={() => goTab(n.id)} />)}</View>}
     </View>
-    <Modal visible={picker} transparent animationType="fade" onRequestClose={() => setPicker(false)}><View style={s.modalBackdrop}><View style={s.modalCard}><Pressable accessibilityRole="button" accessibilityLabel="Close player picker" onPress={() => setPicker(false)} style={s.modalClose}><X size={20} color={C.ink} /></Pressable><ProfilePicker state={state} onChange={setState} onClose={() => setPicker(false)} onFamily={() => { setPicker(false); goTab('family'); }} /></View></View></Modal>
+    <Modal visible={picker} transparent animationType="fade" onRequestClose={() => setPicker(false)}><View style={s.modalBackdrop}><View style={s.modalCard}><ProfilePicker state={state} onChange={changeState} onClose={() => setPicker(false)} onFamily={() => { setPicker(false); goTab('family'); }} /></View></View></Modal>
   </SafeAreaView>;
 }
 

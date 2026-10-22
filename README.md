@@ -1,40 +1,57 @@
 # 60-in-60
 
-A calmer kind of math arcade. An Expo / React Native app for iOS, Android, and web, with original artwork, a forest-green/mint/coral identity, and encouraging practice at every age.
+A calmer kind of math arcade. An Expo / React Native app for iOS, Android, and web, with a forest-green, mint, and coral identity and encouraging practice for every age.
+
+Version **2.0.0** replaces timed modes with **untimed, 20-card sets**, personal recall tracking, and grids of facts known **by heart**. The supplied redesign plan and HTML mockup guide the Home, world, countdown, and results layouts.
 
 ## Play
 
-Seven worlds are open from the start: addition, subtraction, addition + subtraction, multiplication, division, multiplication + division, and all four operations. Each has three levels: **1–5, 1–10, and 1–12**.
+All seven worlds are available: addition, subtraction, addition + subtraction, multiplication, division, multiplication + division, and all four operations. Each offers numbers **1–5, 1–10, and 1–12**. There is one practice flow, with no deadline or failure screen.
 
-Each level has three modes:
+- A breathing 3–2–1 countdown takes about one second per number. Tap anywhere to skip it. Reduced-motion preferences are respected.
+- Answers submit automatically after the expected number of digits. Backspace edits an incomplete answer. Web players can also use the number keys and Backspace.
+- Correct answers advance immediately. The small success check does not block input or clear the next answer.
+- A miss keeps the card, the entered answer, a red X, and the correct answer visible until **Next** is tapped. A set always continues to its last card.
+- Results show accuracy, answer time, median recall time, and comparable figures from the player's previous set in the same range. Wins appear only when supported by actual progress. Misses include the exact typed answer and a derived-fact strategy.
+- **Practice missed (n)** revisits the distinct missed facts in a targeted n-card set and never earns daily recall credit. **Another set** or **Keep going** starts a normal 20-card set; **Done** returns Home.
+- Results buttons wait 900 ms and for 450 ms of quiet after leftover taps or held presses. The keypad sits an additional 32 px inside the native safe area and adapts to shorter screens.
 
-| Mode | Cards | Time | Purpose |
-| --- | --- | --- | --- |
-| Learn | 20 | Untimed | Accuracy and getting comfortable with the facts |
-| Speed | 30 | 45 seconds | Building fluency on the way to mastery |
-| Mastery | 60 | 60 seconds | The original 60-in-60 challenge |
+Each operation has 144 distinct facts, shared across ranges and mixed worlds. Grid coordinates are the two positive source numbers a and b, from 1 to 12. Addition is a + b; multiplication is a × b; subtraction is (a + b) − b; division is (a × b) ÷ b. Thus subtraction and division each fill a complete square with positive, exact answers.
 
-Each session has three hearts. A wrong answer costs one heart; the third miss ends the session. Complete every card before the deadline with at most two misses to pass. Mastery therefore needs at least **58 correct answers out of 60**. Finished runs retain their outcome; timed sessions cannot accept an answer at or after the deadline.
+## Facts by heart
 
-Answers submit automatically when the expected number of digits has been entered. Backspace can correct an incomplete answer. Single-digit answers submit immediately. Web players can also use the number keys and Backspace. No Enter button is needed.
+The four Home grids show **Not yet**, **Learning**, **Almost**, and **By heart**, using white, #DDEFCB, #8FC49C, and #37734E. A single-operation world shows its full grid with numbered axes and gaps after 5 and 10. Mixed worlds contribute to the same four grids. Each world recommends its smallest range that is not currently all By heart.
 
-In Speed and Mastery, correct answers advance to the next card immediately, with no input lock or forced transition delay. A small checkmark acknowledges success for 450 ms without interrupting typing. Incorrect answers show a red flash and an X for 350 ms before advancing; the clock keeps running. Learn retains a 100 ms success pause and a 1.25-second correction pause. There are no digit hints, motivational messages, placeholder underlines, or equals sign in the answer area.
+A clean recall is correct, uses no backspace, and begins within the player's recall bar. Only a fact's first presentation on a local calendar day can earn credit. Presentation is saved even if a player leaves the set before answering, so returning does not create another first-sight opportunity.
 
-The keypad adapts to shorter screens and sits at least 32 pixels above the bottom of the safe app viewport, in addition to the native system-bar inset. Questions and answer boxes share a centered vertical axis. At the end of every run, all missed facts are shown with their correct answers and the entered answers, including on a successful Mastery run. Results navigation waits 900 ms after arrival and for at least 450 ms after the last leftover tap, protecting it from rapid keypad taps.
+| State | Meaning |
+| --- | --- |
+| Not yet | Never presented |
+| Learning | Presented, with no clean days |
+| Almost | One or two clean days |
+| By heart | Three clean days |
 
-Mastery runs show trophy icons in the latest wins list. Each world on Play shows trophy badges for its mastered ranges, using the same player-specific achievements as Progress.
+A clean first-ever answer earns By heart immediately, with an initial check-in due on day 3. Otherwise, three separate clean days are needed; they need not be consecutive. Same-day repeats and Practice missed earn no credit. A miss or a slower answer on a By heart fact moves it to two clean days. Slips do not subtract days from Learning or Almost facts.
 
-Addition and multiplication use operands in the selected range. Subtraction keeps both operands in range and produces nonnegative answers (including zero). Division draws its divisor and quotient from the range and builds an exact dividend, so there are no fractions. Shuffled fact banks cover all facts before repeating, avoid adjacent duplicate questions, and balance mixed operations.
+Reviews are scheduled for days **3, 7, 21, and 60 after earning By heart**, with 60-day maintenance reviews thereafter. A successful late check-in skips milestones already in the past. Early practice and same-day repeats do not advance the schedule. Regaining By heart after a slip starts a new review schedule.
 
-## Family profiles
+Before ten correct calibration answers exist, the recall bar is 3000 ms for players under 13 and 2000 ms for players 13 and up. A player whose birth year has not yet been entered uses 3000 ms. Thereafter, it is the median first-key time on correct +1, ×1, and addition-doubles facts, plus 1000 ms, capped at 3000 ms. Each newly presented card uses the current calibrated bar. Calibration retains its eligible samples so the median remains exact across reloads.
 
-The Family corner supports adding, editing, switching, and removing player profiles. Each player has their own avatar, color, mode completions, mastery collection, and history. Names have a 20-character limit. Removal uses a confirmation step; the last profile cannot be removed through the app.
+Answer records include the canonical fact key, numeric and exact typed answers, correctness, first-key time, submission time, backspace use, and presentation credit context. First-key times above 20 seconds are excluded from timing statistics and calibration. Results time is the sum of eligible answer submission times, excluding correction-reading pauses; per-fact time is median first-key recall time.
 
-Data is stored **on this device** with AsyncStorage. There are no accounts, ads, public scores, cloud sync, or parent authentication. The most recent 100 sessions are retained per player; mastery and per-level progress persist beyond that limit. Completed run IDs make progress updates idempotent. Gentle haptics can be turned off in Family settings and run on native devices only.
+A range trophy is earned when every fact in its square is currently By heart. It stays earned after slips, while live grid counts show current recall. Home has twelve trophies across the four operations. A mixed-world range badge requires the earned badges for each of its operations.
+
+## Family profiles and upgrade
+
+Parents can add, edit, switch, and remove players in Family. Each has their own avatar, color, birth year, recall calibration, facts, trophies, and recent sets. Names have a 20-character limit. Family shows age computed from birth year. Removing a player asks for confirmation, and the final player cannot be removed through the UI. Gentle haptics can be switched off.
+
+**The 2.0.0 upgrade intentionally resets old timed progress and history.** Player identities, names, avatars, colors, and device settings are retained. No old timed achievements are converted into recall credit. The storage schema is versioned so subsequent reloads retain the new progress rather than resetting it again. Existing players can add a birth year in Family.
+
+Data stays on this device with AsyncStorage. There are no accounts, ads, leaderboards, cloud sync, or parent authentication. The most recent 100 completed sets are retained per player; fact progress and earned trophies persist beyond that limit. Writes are serialized to prevent older saves overwriting newer ones. The sanitizer validates facts, dates, calibration samples, birth years, history, and trophy IDs before restoring them.
 
 ## Develop
 
-Requirements: Node 20.19.4 or later (validated here with Node 24.19.0), npm, and Chromium for browser tests. Uses Expo SDK 54, React 19.1, and React Native 0.81.5; versions are fixed by `package-lock.json`.
+Requirements: Node 20.19.4 or later, npm, and Chromium for browser tests. This environment uses Node 24.19.0. Expo SDK 54, React 19.1, and React Native 0.81.5 are fixed by `package-lock.json`.
 
 ```sh
 cd /workspace/codex-test
@@ -42,9 +59,9 @@ npm ci --no-audit --no-fund
 npm run web -- --port 8081 --max-workers 2
 ```
 
-The web command starts Metro in offline mode: it serves the installed packages and bundled fonts without Expo API access. Package installation still uses the npm registry with normal TLS and integrity checks. The CLI wrapper stores Expo state in ignored `.expo/home` so it can run in a cloud environment with a read-only home directory. npm uses a project-local ignored cache.
+Metro uses the supported Expo offline mode and local bundled fonts. Gameplay needs no backend or secret. Installation uses the npm registry with normal TLS and package integrity checks. Expo state and npm caches are stored in ignored project-local directories so the cloud workflow supports a read-only home directory.
 
-For native development on a workstation, `npm start` opens the Expo development server, and `npm run ios` / `npm run android` launch installed compatible simulators. Use a client compatible with Expo SDK 54 or a native build; iOS simulator/Xcode and Android SDK/emulator are not provided by this Linux cloud instance. If using the cloud machine, `EXPO_OFFLINE=1 npm start -- --host localhost` starts Metro with existing packages without remote version discovery. There are no required secrets or backend services for gameplay.
+On a workstation, `npm start` starts Expo and `npm run ios` / `npm run android` use installed compatible simulators. Use a client compatible with Expo SDK 54 or a standalone native build. This Linux cloud instance has no Xcode/iOS simulator or Android SDK/emulator.
 
 ## Verify
 
@@ -55,17 +72,15 @@ npm run test:e2e
 EXPO_OFFLINE=1 npm run build -- --max-workers 2
 ```
 
-- The 19 unit tests exercise all arithmetic worlds/ranges, shuffling, digit counts, timing boundaries, the third-miss limit, 58-of-60 mastery, complete missed-answer capture, independent player progress, persistence validation, and bounded history.
-- The 15 Playwright tests exercise the real UI: keypad/backspace, heart limits, replay, a full mastery run, deadlines, missed-fact review, trophies, and family profiles across reloads. Frozen-clock checks verify immediate timed transitions, preservation of partially entered answers, feedback timer replacement, Learn pacing, the terminal mistake flash, and results protection from rapid taps and held presses. Layout checks cover 344×740 and 768×720 with simulated native system insets and extra keypad clearance. These are browser checks; a physical Samsung device has not been tested here. The suite starts Metro if necessary. It uses `/usr/bin/chromium` in this cloud machine; set `CHROMIUM_PATH` to another installed binary when needed.
-- `build` exports web JavaScript and iOS/Android Hermes bundles into ignored `dist/`. **Bundle export is not a signed native binary build or device test.**
+Unit checks cover full arithmetic banks, set completion, answer timing, clean recall, daily credit, first sight, slips, review dates, calibration, picker buckets, mixed balancing, earned trophies, profile migration, sanitization, and truthful coaching. Calendar behavior is also checked with `TZ=America/New_York npm test`.
+
+Playwright checks exercise real 20-card sets, held mistakes and Next, targeted practice, persistent grids and trophies, family editing and isolation, the countdown, results tap protection, and legacy migration. Layout checks cover 344×740 and 768×720 with simulated native safe-area insets, plus a 1440 px desktop. Chromium is `/usr/bin/chromium` here; `CHROMIUM_PATH` can select another installed binary. The runner starts Metro or reuses an existing server.
+
+The export command produces web JavaScript and native iOS/Android Hermes bundles in ignored `dist/`. **Bundle exports and browser checks are not signed APK builds or physical-phone tests.**
 
 ## Native distribution
 
-`app.json` includes app identity, portrait orientation, tablet support, native icons, and a URL scheme. `eas.json` includes an Android APK / iOS simulator preview profile and a production profile.
-
-The project is linked to [@nutmagpie/60-in-60 on Expo](https://expo.dev/accounts/nutmagpie/projects/60-in-60). Android signing credentials are configured remotely in Expo. EAS source uploads require access to `storage.googleapis.com`; account/build operations use `api.expo.dev`, and installation links use `expo.dev`.
-
-From a machine with an Expo account and the appropriate build access:
+The app is linked to [@nutmagpie/60-in-60 on Expo](https://expo.dev/accounts/nutmagpie/projects/60-in-60). Android package `com.sixtyin60.game` and the existing remote signing credentials are retained. Version 2.0.0 uses Android versionCode 4. The `preview` EAS profile produces an internal standalone APK; the iOS preview profile produces a simulator build.
 
 ```sh
 npx eas-cli build --platform android --profile preview
@@ -73,29 +88,29 @@ npx eas-cli build --platform ios --profile preview
 npx eas-cli build --platform all --profile production
 ```
 
-Version 1.0.2 (Android build 3) adds the cleaner answer layout, system-bar clearance, red X mistake feedback, complete missed-fact review, protected results controls, and mastery trophies described above. Expo accepted [build 5a09b716-6e73-40c4-a9cc-015144068df2](https://expo.dev/accounts/nutmagpie/projects/60-in-60/builds/5a09b716-6e73-40c4-a9cc-015144068df2) from source commit `63f69de3d9956a52dd15afdebe828634136e896f`. It is waiting for an Expo worker; its new APK link will be recorded when the build finishes.
+Build/account operations use `api.expo.dev`, source uploads use `storage.googleapis.com`, and public install/artifact links use `expo.dev`. An Expo account and signing access are needed only for native distribution. Earlier public artifact downloads in this cloud environment returned HTTP 403; this does not imply missing build credentials.
 
-The previous version 1.0.1 timing update (Android build 2), [build 48b4c0e6-5224-4831-85a8-3c61e21c262f](https://expo.dev/accounts/nutmagpie/projects/60-in-60/builds/48b4c0e6-5224-4831-85a8-3c61e21c262f), finished successfully. [Download the previous standalone APK](https://expo.dev/artifacts/eas/1z4B9x4uxQYDo7Q4DfmbZpc2tfRbOVh0Y4-W2HHw5nU.apk). It includes immediate correct-answer advancement in Speed and Mastery; it does not include the 1.0.2 changes. The standalone app runs without a MacBook, Expo Go, or a development server.
-
-Earlier artifact download attempts in this cloud environment returned HTTP 403 from Expo, including through the official EAS download command. No APK integrity/signature checks or physical-device installation have been verified here. Version 1.0.2 passed type checking, all 19 unit tests, all 15 browser tests, and native bundle exports; its signed APK is still pending in Expo's worker queue.
-
-The iOS preview profile produces a simulator build. Production iOS builds require Apple signing; Android store submission requires a Play Console app and signing configuration. Choose your own unique bundle identifiers before a store release. Store submission has not been completed.
+The new 2.0.0 build record will be added here after submission. Previous 1.0.x APKs contain the timed game and do not contain this redesign.
 
 ### Install on Android
 
-1. Open the APK download link on your Android phone and download the file.
-2. Open the downloaded APK. If Android prompts, allow **Install unknown apps** / **Allow from this source** for the browser or file manager, then tap **Install** (or **Update** if already installed). Install updates over the existing app to keep its player profiles and progress.
-3. Open **60-in-60** and create or choose a player profile. Gameplay works offline; profiles and progress stay on that device.
+1. Open the new build record on the phone, wait for **Finished**, and download its APK.
+2. Open the downloaded file. If Android prompts, allow installation from that browser or file manager, then choose **Update** over the existing app. Player identities remain; old timed progress resets as described above.
+3. Open **60-in-60** and choose a player. It works offline, without a MacBook, Expo Go, or development server.
+
+Production iOS builds require Apple signing, and Android store submission requires a Play Console app. Store submission has not been completed.
 
 ## Source map
 
-- `App.tsx`: navigation, font initialization, profile loading, persistence, and session lifecycle.
-- `src/game.ts`: pure arithmetic and session engine.
-- `src/Lobby.tsx`: worlds, level/mode selection, progress, and instructions.
-- `src/Play.tsx`: keypad, countdown, clock, heart feedback, and results.
-- `src/profileModel.ts` / `src/profiles.ts`: pure profile model and serialized storage.
-- `src/Family.tsx`: family management and player selection.
-- `src/ui.tsx` / `src/art.tsx`: typography, shared controls, and vector brand illustrations.
-- `assets/`: original app icon and favicon sources plus platform PNGs.
+- `App.tsx`: navigation, profile ownership, font setup, persistence, and set lifecycle.
+- `src/game.ts`: canonical fact banks and the pure untimed set engine.
+- `src/recall.ts`: calendar credit, recall states, calibration, reviews, trophies, and fact selection.
+- `src/FactGrid.tsx`: real grids, axis/range spacing, legend, and trophy pills.
+- `src/coaching.ts`: truthful wins, conditional coaching, and derived-fact strategies.
+- `src/Lobby.tsx`: Home, worlds/ranges, Progress, and How to play.
+- `src/Play.tsx`: breathing countdown, flash cards, number pad, corrections, and results.
+- `src/profileModel.ts` / `src/profiles.ts`: player model, validation, migration, and serialized storage.
+- `src/Family.tsx`: birth year, player management, settings, and profile selection.
+- `src/ui.tsx` / `src/art.tsx`: shared controls, typography, and original brand illustrations.
 
-Cloud tasks are already isolated. Work in the existing checkout rather than creating another Git worktree unless explicitly requested.
+Cloud tasks are already isolated. Use the existing checkout rather than creating another Git worktree unless explicitly requested.

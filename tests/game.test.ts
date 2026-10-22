@@ -1,238 +1,71 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {
-  MODES, RANGES, WORLDS, createSession, expectedDigits, generateQuestions,
-  getLevel, getLevels, submitAnswer, tickSession,
-  type Operation, type Question, type Session,
-} from '../src/game';
-
-function seededRandom(seed = 1234): () => number {
-  let state = seed >>> 0;
-  return () => {
-    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
-    return state / 4294967296;
-  };
+import { createSession, expectedDigits, factBank, factFromKey, getLevel, getLevels, makeFact, OPERATIONS, RANGES, submitAnswer, WORLDS } from '../src/game';
+import { createProfile, sessionRecord } from '../src/profileModel';
+import { practiceSelection, selectSet } from '../src/recall';
+import { coachingLine, setWin, strategy } from '../src/coaching';
+const now = new Date(2026, 9, 21, 12);
+const credit = { firstSight: true, creditEligible: true, creditDate: '2026-10-21', recallBarMs: 3000 };
+function finish(wrong = 0, firstKeyMs = 1000) {
+  const p = createProfile('A'); let s = createSession(getLevel('addition-5'), selectSet(getLevel('addition-5'), p), 3000, now);
+  while (s.status === 'playing') s = submitAnswer(s, s.questions[s.index].answer + Number(s.index < wrong), { firstKeyMs, submitMs: firstKeyMs + 200, usedBackspace: false }, credit, now);
+  return s;
 }
-
-function factKey(question: Question): string {
-  return `${question.operation}:${question.left}:${question.right}`;
-}
-
-function answerAll(session: Session, wrongIndexes: number[] = []): Session {
-  let result = session;
-  while (result.status === 'playing') {
-    const answer = result.questions[result.index].answer;
-    result = submitAnswer(result, wrongIndexes.includes(result.index) ? answer + 1 : answer);
-  }
-  return result;
-}
-
-test('all seven worlds have the three requested level ranges', () => {
-  assert.deepEqual(WORLDS.map(world => world.id), [
-    'addition', 'subtraction', 'add-subtract', 'multiplication', 'division', 'multiply-divide', 'all',
-  ]);
-  for (const world of WORLDS) {
-    assert.deepEqual(getLevels(world.id).map(level => level.range), [...RANGES]);
-    for (const level of getLevels(world.id)) assert.deepEqual(getLevel(level.id), level);
-  }
-  assert.throws(() => getLevel('missing-world-5'), /Unknown level/);
+test('all worlds expose all three ranges without modes', () => {
+  assert.equal(WORLDS.length, 7);
+  for (const w of WORLDS) { assert.deepEqual(getLevels(w.id).map(l => l.range), RANGES); for (const l of getLevels(w.id)) assert.deepEqual(getLevel(l.id), l); }
+  assert.throws(() => getLevel('bad'), /Unknown/);
 });
-
-test('question banks cover the arithmetic facts and respect all range rules', () => {
-  const operations: Operation[] = ['addition', 'subtraction', 'multiplication', 'division'];
-  for (const range of RANGES) {
-    for (const operation of operations) {
-      const level = getLevel(`${operation}-${range}`);
-      const bankSize = operation === 'subtraction' ? range * (range + 1) / 2 : range * range;
-      const questions = generateQuestions(level, bankSize, seededRandom(range));
-      assert.equal(questions.length, bankSize);
-      assert.equal(new Set(questions.map(factKey)).size, bankSize, `${operation} bank must not repeat facts`);
-      const actualFacts = new Set(questions.map(factKey));
-      for (let a = 1; a <= range; a++) {
-        for (let b = 1; b <= range; b++) {
-          if (operation === 'subtraction' && b > a) continue;
-          assert.ok(actualFacts.has(`${operation}:${operation === 'division' ? a * b : a}:${b}`));
-        }
-      }
-      for (const question of questions) {
-        assert.equal(question.operation, operation);
-        assert.ok(question.right >= 1 && question.right <= range);
-        if (operation !== 'division') assert.ok(question.left >= 1 && question.left <= range);
-        switch (operation) {
-          case 'addition': assert.equal(question.answer, question.left + question.right); break;
-          case 'subtraction':
-            assert.ok(question.answer >= 0);
-            assert.equal(question.answer, question.left - question.right);
-            break;
-          case 'multiplication': assert.equal(question.answer, question.left * question.right); break;
-          case 'division':
-            assert.equal(question.left % question.right, 0);
-            assert.equal(question.answer, question.left / question.right);
-            assert.ok(question.answer >= 1 && question.answer <= range);
-            break;
-        }
-      }
+test('every operation fills a canonical 12 by 12 grid and smaller square banks', () => {
+  for (const op of OPERATIONS) for (const r of RANGES) {
+    const bank = factBank(op, r); assert.equal(bank.length, r * r); assert.equal(new Set(bank.map(f => f.factKey)).size, r * r);
+    for (const f of bank) {
+      assert.deepEqual(factFromKey(f.factKey), f); assert.equal(f.symbol, { addition: '+', subtraction: '−', multiplication: '×', division: '÷' }[op]);
+      assert.equal(f.answer, op === 'addition' ? f.left + f.right : op === 'subtraction' ? f.left - f.right : op === 'multiplication' ? f.left * f.right : f.left / f.right);
+      if (op === 'subtraction') { assert.equal(f.left, f.a + f.b); assert.equal(f.answer, f.a); }
+      if (op === 'division') { assert.equal(f.left, f.a * f.b); assert.equal(f.answer, f.a); }
     }
   }
+  assert.deepEqual(makeFact('subtraction', 12, 12), { factKey: 'subtraction:12:12', operation: 'subtraction', a: 12, b: 12, left: 24, right: 12, answer: 12, symbol: '−' });
+  for (const key of ['addition:0:1', 'addition:13:1', 'addition:01:1', '__proto__', 'division:1:1:1']) assert.equal(factFromKey(key), null);
 });
-
-test('mixed worlds distribute operations evenly without adjacent identical facts', () => {
-  for (const world of WORLDS) {
-    const questions = generateQuestions(getLevels(world.id)[0], 137, seededRandom(45));
-    const counts = world.operations.map(operation => questions.filter(question => question.operation === operation).length);
-    assert.ok(Math.max(...counts) - Math.min(...counts) <= 1);
-    assert.equal(new Set(questions.map(question => question.id)).size, questions.length);
-    questions.forEach((question, index) => {
-      if (index > 0) assert.notEqual(factKey(question), factKey(questions[index - 1]));
-    });
-  }
+test('sets always reach twenty answers even if all twenty are missed', () => {
+  const s = finish(20); assert.equal(s.status, 'complete'); assert.equal(s.answers.length, 20); assert.equal(s.answers.filter(a => a.correct).length, 0);
+  assert.equal(submitAnswer(s, 1, { firstKeyMs: 1, submitMs: 1, usedBackspace: false }, credit), s);
+  assert.ok(!('hearts' in s)); assert.ok(!('mode' in s)); assert.ok(!('failureReason' in s));
 });
-
-test('shuffle is reproducible for a seed, varies across seeds, and avoids bank-boundary repeats', () => {
-  const level = getLevel('subtraction-5');
-  const first = generateQuestions(level, 200, seededRandom(12));
-  assert.deepEqual(first, generateQuestions(level, 200, seededRandom(12)));
-  assert.notDeepEqual(first, generateQuestions(level, 200, seededRandom(19)));
-  // Even an adversarial constant RNG should not put identical facts together.
-  const constant = generateQuestions(level, 100, () => 0);
-  constant.forEach((question, index) => {
-    if (index) assert.notEqual(factKey(question), factKey(constant[index - 1]));
-  });
-  assert.deepEqual(generateQuestions(level, 0), []);
-  assert.throws(() => generateQuestions(level, -1), /card count/);
-  assert.throws(() => generateQuestions(level, 1.5), /card count/);
+test('answer records retain the fact, typed value, both timings, backspace and credit context', () => {
+  const level = getLevel('multiplication-12'); let s = createSession(level, { facts: [makeFact('multiplication', 12, 12)], showWhatYouKnow: false, practiceMissed: true }, 3000, now);
+  const timing = { firstKeyMs: 1250, submitMs: 1700, usedBackspace: true }; s = submitAnswer(s, 140, timing, credit, now);
+  assert.equal(s.answers[0].value, 140); assert.equal(s.answers[0].correct, false); assert.equal(s.answers[0].factKey, 'multiplication:12:12');
+  assert.deepEqual(Object.fromEntries(Object.keys(timing).map(k => [k, s.answers[0][k as keyof typeof timing]])), timing);
+  assert.equal(s.elapsedMs, 1700); assert.equal(expectedDigits(s.questions[0]), 3);
+  assert.throws(() => submitAnswer(createSession(level, { facts: [makeFact('addition', 1, 1)], showWhatYouKnow: false, practiceMissed: false }, 3000), -1, timing, credit), RangeError);
 });
-
-test('the three modes start with their documented card and timer counts', () => {
-  const level = getLevel('addition-10');
-  const sessionIds = new Set<string>();
-  assert.deepEqual(Object.values(MODES).map(mode => [mode.cards, mode.seconds]), [[20, null], [30, 45], [60, 60]]);
-  for (const mode of ['learn', 'speed', 'mastery'] as const) {
-    const session = createSession(level, mode, seededRandom());
-    assert.equal(session.questions.length, MODES[mode].cards);
-    assert.equal(session.hearts, 3);
-    assert.equal(session.status, 'playing');
-    assert.equal(session.answered, 0);
-    assert.equal(session.lastAnswer, null);
-    assert.deepEqual(session.missedAnswers, []);
-    sessionIds.add(session.id);
-  }
-  assert.equal(sessionIds.size, 3);
+test('interruptions longer than twenty seconds are absent from both timing statistics', () => {
+  let s = createSession(getLevel('addition-5'), { facts: [makeFact('addition', 1, 1), makeFact('addition', 2, 2)], showWhatYouKnow: false, practiceMissed: false }, 3000, now);
+  s = submitAnswer(s, 2, { firstKeyMs: 20_001, submitMs: 21_000, usedBackspace: false }, credit, now);
+  s = submitAnswer(s, 4, { firstKeyMs: 1000, submitMs: 1500, usedBackspace: false }, credit, now);
+  assert.equal(s.elapsedMs, 1500); assert.equal(sessionRecord(s).medianMs, 1000); assert.equal(s.answers.length, 2);
+  assert.equal(sessionRecord(finish(0, 20_001)).medianMs, null);
 });
-
-test('mastery passes with 58 correct answers and two mistakes', () => {
-  const original = createSession(getLevel('addition-10'), 'mastery', seededRandom());
-  const result = answerAll(original, [0, 59]);
-  assert.equal(result.status, 'passed');
-  assert.equal(result.correct, 58);
-  assert.equal(result.answered, 60);
-  assert.equal(result.mistakes, 2);
-  assert.equal(result.hearts, 1);
-  assert.equal(result.failureReason, null);
-  assert.equal(result.index, 60);
-  assert.equal(result.id, original.id);
-  assert.equal(original.answered, 0, 'submission must preserve the previous state');
-  assert.equal(original.hearts, 3);
-  assert.deepEqual(result.missedAnswers, [0, 59].map(index => ({
-    question: original.questions[index], value: original.questions[index].answer + 1, correct: false,
-  })));
-  assert.deepEqual(original.missedAnswers, [], 'reviewing a run must not change its original state');
+test('Practice missed contains exactly the missed facts, deduplicated, without discovery credit', () => {
+  const s = finish(3); const selection = practiceSelection([...s.answers, s.answers[0]]);
+  assert.equal(selection.facts.length, 3); assert.equal(selection.practiceMissed, true); assert.equal(selection.showWhatYouKnow, false);
 });
-
-test('the third mistake ends the run, including on the final card', () => {
-  const original = createSession(getLevel('division-12'), 'mastery', seededRandom());
-  let session = submitAnswer(original, -1);
-  assert.equal(session.hearts, 2);
-  assert.equal(session.status, 'playing');
-  session = submitAnswer(session, -1);
-  assert.equal(session.hearts, 1);
-  assert.equal(session.status, 'playing');
-  session = submitAnswer(session, -1);
-  assert.equal(session.hearts, 0);
-  assert.equal(session.answered, 3);
-  assert.equal(session.status, 'failed');
-  assert.equal(session.failureReason, 'hearts');
-  assert.equal(session.lastAnswer?.correct, false);
-  assert.deepEqual(session.missedAnswers, original.questions.slice(0, 3).map(question => ({
-    question, value: -1, correct: false,
-  })));
-  assert.strictEqual(submitAnswer(session, 1), session);
-
-  const lastCardFailure = answerAll(original, [0, 1, 59]);
-  assert.equal(lastCardFailure.answered, 60);
-  assert.equal(lastCardFailure.correct, 57);
-  assert.equal(lastCardFailure.status, 'failed');
-  assert.equal(lastCardFailure.failureReason, 'hearts');
-  assert.deepEqual(lastCardFailure.missedAnswers.map(answer => answer.question.id), [0, 1, 59].map(index => original.questions[index].id));
+test('coaching is conditional and never calls 95 percent a perfect result', () => {
+  assert.match(coachingLine(finish(3))!, /^Accuracy first/); assert.equal(coachingLine(finish(2)), null);
+  assert.match(coachingLine(finish(1, 4000))!, /^Almost every answer right/);
+  assert.match(coachingLine(finish(0, 4000))!, /^Every answer right/);
+  assert.equal(coachingLine(finish(3, 4000)), null); assert.equal(coachingLine(finish(0, 20_001)), null);
 });
-
-test('missed facts survive later correct answers and timeouts, while a new run starts fresh', () => {
-  const level = getLevel('subtraction-10');
-  for (const mode of ['learn', 'speed', 'mastery'] as const) {
-    const original = createSession(level, mode, seededRandom());
-    const question = original.questions[0];
-    const wrongValue = question.answer + 1;
-    const afterMiss = submitAnswer(original, wrongValue);
-    const afterCorrect = submitAnswer(afterMiss, afterMiss.questions[afterMiss.index].answer);
-    const finalTime = MODES[mode].seconds === null ? 60_000 : MODES[mode].seconds! * 1000;
-    const stopped = tickSession(afterCorrect, finalTime);
-    assert.deepEqual(stopped.missedAnswers, [{ question, value: wrongValue, correct: false }]);
-    assert.equal(stopped.answered, 2, 'an unanswered card at timeout is not a missed submission');
-    assert.equal(stopped.status, mode === 'learn' ? 'playing' : 'failed');
-    assert.equal(stopped.failureReason, mode === 'learn' ? null : 'time');
-    assert.deepEqual(afterMiss.missedAnswers, [{ question, value: wrongValue, correct: false }]);
-    assert.deepEqual(original.missedAnswers, []);
-    assert.deepEqual(createSession(level, mode, seededRandom()).missedAnswers, []);
-  }
+test('derived-fact coaching is available for every fact and uses exact arithmetic', () => {
+  for (const op of OPERATIONS) for (const f of factBank(op)) { const text = strategy(f); assert.ok(text.length > 15); assert.match(text, new RegExp(`\\b${f.answer}\\b`)); }
+  assert.equal(strategy(makeFact('multiplication', 9, 7)), 'Think 10 × 7 = 70, then take away one 7. That’s 63.');
+  assert.equal(strategy(makeFact('multiplication', 12, 8)), 'Think 10 × 8 = 80, plus 2 × 8 = 16. That’s 96.');
 });
-
-test('timers are monotonic and fail exactly at the mode deadline', () => {
-  const level = getLevel('multiplication-12');
-  for (const mode of ['speed', 'mastery'] as const) {
-    const deadline = MODES[mode].seconds! * 1000;
-    const original = createSession(level, mode, seededRandom());
-    const running = tickSession(original, deadline - 1);
-    assert.equal(running.status, 'playing');
-    assert.strictEqual(tickSession(running, 10), running);
-    const stopped = tickSession(running, deadline);
-    assert.equal(stopped.status, 'failed');
-    assert.equal(stopped.failureReason, 'time');
-    assert.equal(stopped.elapsedMs, deadline);
-    assert.equal(original.elapsedMs, 0);
-    assert.strictEqual(tickSession(stopped, deadline + 5000), stopped);
-    assert.strictEqual(submitAnswer(stopped, stopped.questions[0].answer), stopped);
-  }
-  const learning = tickSession(createSession(level, 'learn', seededRandom()), 3_600_000);
-  assert.equal(learning.status, 'playing');
-  assert.equal(learning.elapsedMs, 3_600_000);
-  const won = answerAll(createSession(level, 'mastery', seededRandom()));
-  assert.strictEqual(tickSession(won, 60_000), won);
-  assert.strictEqual(submitAnswer(won, 1), won);
-});
-
-test('the final answer passes just before the deadline and is refused at the deadline', () => {
-  let session = createSession(getLevel('all-12'), 'mastery', seededRandom());
-  for (let index = 0; index < 59; index++) {
-    session = submitAnswer(session, session.questions[session.index].answer);
-  }
-  const finalAnswer = session.questions[session.index].answer;
-  const justInTime = submitAnswer(tickSession(session, 59_999), finalAnswer);
-  assert.equal(justInTime.status, 'passed');
-  assert.equal(justInTime.correct, 60);
-  assert.equal(justInTime.elapsedMs, 59_999);
-  assert.strictEqual(tickSession(justInTime, 60_000), justInTime);
-
-  const tooLate = tickSession(session, 60_000);
-  assert.strictEqual(submitAnswer(tooLate, finalAnswer), tooLate);
-  assert.equal(tooLate.status, 'failed');
-  assert.equal(tooLate.answered, 59);
-  assert.equal(tooLate.correct, 59);
-  assert.equal(tooLate.failureReason, 'time');
-});
-
-test('auto-submit uses one, two, or three digits, including a zero answer', () => {
-  const base: Question = { id: 'digits', left: 1, right: 1, operation: 'addition', symbol: '+', answer: 0 };
-  assert.equal(expectedDigits(base), 1);
-  assert.equal(expectedDigits({ ...base, answer: 24 }), 2);
-  assert.equal(expectedDigits({ ...base, answer: 144 }), 3);
+test('wins are earned: no generic consolation, no invented perfect set, no practice credit', () => {
+  const before = createProfile('A'); assert.equal(setWin(finish(2), before, before, now), null);
+  assert.equal(setWin(finish(), before, before, now)?.title, 'Your first perfect set.');
+  const s = { ...finish(), practiceMissed: true }; assert.equal(setWin(s, before, before, now), null);
 });
