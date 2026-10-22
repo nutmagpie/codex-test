@@ -90,7 +90,9 @@ npx eas-cli build --platform all --profile production
 
 Build/account operations use `api.expo.dev`, source uploads use `storage.googleapis.com`, and public install/artifact links use `expo.dev`. An Expo account and signing access are needed only for native distribution. Earlier public artifact downloads in this cloud environment returned HTTP 403; this does not imply missing build credentials.
 
-The new 2.0.0 build record will be added here after submission. Previous 1.0.x APKs contain the timed game and do not contain this redesign.
+Expo accepted [Android 2.0.0 build b6dc2741-855d-473e-8c46-1236fccfe7d1](https://expo.dev/accounts/nutmagpie/projects/60-in-60/builds/b6dc2741-855d-473e-8c46-1236fccfe7d1) from source commit `013f03f99463f1dccb3040fc535877ec84c49b7a`, using the existing remote keystore. It is waiting for an Expo worker; download its APK from that record once it says **Finished**. Previous 1.0.x APKs contain the timed game and do not contain this redesign.
+
+Validated for this release: TypeScript, all 33 unit tests (including local calendar checks with `TZ=America/New_York`), all 15 browser tests, and web/iOS/Android bundle exports. The new signed APK remains pending; its signature and physical-device installation have not been tested here.
 
 ### Install on Android
 
